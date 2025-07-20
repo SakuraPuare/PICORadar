@@ -1,0 +1,62 @@
+# This is a GitHub Actions workflow for the PICO Radar C++ project.
+# It automates the build and test process to ensure code quality.
+
+name: C++ CI
+
+# Controls when the action will run.
+on:
+  # Triggers the workflow on push or pull request events but only for the main branch
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # We need the vcpkg submodule
+          submodules: 'recursive'
+
+      # 2. Cache vcpkg dependencies to speed up subsequent runs
+      - name: Cache vcpkg dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg/archives
+            vcpkg_installed
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-
+
+      # 3. Install dependencies using vcpkg
+      - name: Install dependencies
+        run: vcpkg install --triplet x64-linux
+
+      # 4. Configure CMake
+      #    This step generates the build files and the compile_commands.json
+      - name: Configure CMake
+        run: >
+          cmake -B build -S .
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
+
+      # 5. Build the project
+      - name: Build project
+        run: cmake --build build --config Debug
+
+      # 6. Run tests using CTest
+      - name: Run tests
+        working-directory: ./build
+        # --output-on-failure will print the test output if it fails
+        run: ctest -C Debug --output-on-failure

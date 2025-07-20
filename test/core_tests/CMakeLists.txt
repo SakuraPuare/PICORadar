@@ -4,6 +4,10 @@ add_executable(core_tests
     test_player_registry.cpp
 )
 
+# 将测试可执行文件注册到CTest
+add_test(NAME core_tests COMMAND core_tests)
+
+
 # 添加头文件搜索路径
 target_include_directories(core_tests
     PRIVATE
