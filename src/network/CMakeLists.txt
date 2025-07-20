@@ -2,6 +2,7 @@
 
 add_library(network_lib
     websocket_server.cpp
+    udp_discovery_server.cpp
 )
 
 target_include_directories(network_lib

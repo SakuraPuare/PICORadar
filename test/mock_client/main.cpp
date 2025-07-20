@@ -1,9 +1,11 @@
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
+#include <boost/asio/ip/udp.hpp>
 #include <cstdlib>
 #include <glog/logging.h>
 #include <iostream>
 #include <string>
+#include <vector>
 #include "player_data.pb.h"
 
 namespace beast = boost::beast;
@@ -11,29 +13,75 @@ namespace http = beast::http;
 namespace websocket = beast::websocket;
 namespace net = boost::asio;
 using tcp = boost::asio::ip::tcp;
+using udp = net::ip::udp;
 
-// 报告错误并退出
+const std::string DISCOVERY_REQUEST = "PICO_RADAR_DISCOVERY_REQUEST";
+const std::string DISCOVERY_RESPONSE_PREFIX = "PICO_RADAR_SERVER:";
+
 void fail(beast::error_code ec, char const* what) {
     LOG(ERROR) << what << ": " << ec.message();
 }
 
-// 一个简单的同步WebSocket客户端
+std::pair<std::string, std::string> split_address(const std::string& s) {
+    size_t pos = s.find(':');
+    if (pos == std::string::npos) {
+        return {"", ""};
+    }
+    return {s.substr(0, pos), s.substr(pos + 1)};
+}
+
 class SyncClient {
 public:
-    SyncClient(std::string host, std::string port)
-        : host_(std::move(host)), port_(std::move(port)), resolver_(ioc_), ws_(ioc_) {}
+    SyncClient() : resolver_(ioc_), ws_(ioc_) {}
 
-    // 返回0表示成功，非0表示失败
-    int run(const std::string& token, const std::string& mode, const std::string& player_id) {
+    int discover_and_run(const std::string& token, const std::string& player_id) {
+        try {
+            LOG(INFO) << "Attempting to discover server via UDP broadcast...";
+            udp::socket socket(ioc_);
+            socket.open(udp::v4());
+            socket.set_option(net::socket_base::broadcast(true));
+
+            udp::endpoint broadcast_endpoint(net::ip::address_v4::broadcast(), 9001);
+            socket.send_to(net::buffer(DISCOVERY_REQUEST), broadcast_endpoint);
+
+            udp::endpoint server_endpoint;
+            std::array<char, 128> recv_buf;
+            size_t len = socket.receive_from(net::buffer(recv_buf), server_endpoint);
+            
+            std::string response(recv_buf.data(), len);
+            if (response.rfind(DISCOVERY_RESPONSE_PREFIX, 0) != 0) {
+                LOG(ERROR) << "Received invalid discovery response: " << response;
+                return 1;
+            }
+
+            std::string server_address_str = response.substr(DISCOVERY_RESPONSE_PREFIX.length());
+            auto [host, port] = split_address(server_address_str);
+            
+            host_ = server_endpoint.address().to_string();
+            port_ = port;
+
+            LOG(INFO) << "Server discovered at " << host_ << ":" << port_;
+            return run_internal(token, "--test-auth-success", player_id);
+
+        } catch (std::exception const& e) {
+            LOG(ERROR) << "Discovery failed: " << e.what();
+            return 1;
+        }
+    }
+
+    int run(const std::string& host, const std::string& port, const std::string& token, const std::string& mode, const std::string& player_id) {
+        host_ = host;
+        port_ = port;
+        return run_internal(token, mode, player_id);
+    }
+
+private:
+    int run_internal(const std::string& token, const std::string& mode, const std::string& player_id) {
         try {
             auto const results = resolver_.resolve(host_, port_);
             net::connect(ws_.next_layer(), results.begin(), results.end());
             
-            websocket::stream_base::timeout opt{
-                std::chrono::seconds(10), 
-                std::chrono::seconds(10),
-                true
-            };
+            websocket::stream_base::timeout opt{ std::chrono::seconds(10), std::chrono::seconds(10), true };
             ws_.set_option(opt);
 
             ws_.handshake(host_ + ":" + port_, "/");
@@ -44,18 +92,10 @@ public:
                 return (mode == "--test-auth-fail") ? 0 : 1;
             }
 
-            if (mode == "--test-auth-success") {
-                return 0; // 认证成功即测试通过
-            }
-            if (mode == "--seed-data") {
-                return seed_data();
-            }
-            if (mode == "--test-broadcast") {
-                return test_broadcast();
-            }
-            if (mode == "--interactive") {
-                return interactive_listen();
-            }
+            if (mode == "--test-auth-success") return 0;
+            if (mode == "--seed-data") return seed_data();
+            if (mode == "--test-broadcast") return test_broadcast();
+            if (mode == "--interactive") return interactive_listen();
 
             LOG(ERROR) << "Unknown client mode: " << mode;
             return 1;
@@ -70,7 +110,6 @@ public:
         }
     }
 
-private:
     bool authenticate(const std::string& token, const std::string& player_id) {
         picoradar::ClientToServer auth_message;
         auto* auth_request = auth_message.mutable_auth_request();
@@ -98,7 +137,7 @@ private:
         LOG(INFO) << "Seeding data...";
         picoradar::ClientToServer seed_message;
         auto* player_data = seed_message.mutable_player_data();
-        player_data->set_player_id("seeder_client"); // This ID is what gets stored
+        player_data->set_player_id("seeder_client");
         player_data->mutable_position()->set_x(1.23f);
 
         std::string serialized_seed;
@@ -164,17 +203,36 @@ int main(int argc, char** argv) {
     google::InitGoogleLogging(argv[0]);
     FLAGS_logtostderr = true;
 
-    if (argc < 5) {
-        LOG(ERROR) << "Usage: mock_client <host> <port> <token> <player_id> [--test-auth-success | ...]";
+    if (argc < 2) {
+        LOG(ERROR) << "Usage: \n"
+                   << "  " << argv[0] << " <host> <port> <token> <player_id> [mode]\n"
+                   << "  " << argv[0] << " --discover <token> <player_id>";
         return 1;
     }
 
-    const std::string host = argv[1];
-    const std::string port = argv[2];
-    const std::string token = argv[3];
-    const std::string player_id = argv[4];
-    const std::string mode = (argc > 5) ? argv[5] : "--interactive";
+    SyncClient client;
+    std::string mode_str = argv[1];
 
-    SyncClient client(host, port);
-    return client.run(token, mode, player_id);
+    if (mode_str == "--discover") {
+        if (argc != 4) {
+            LOG(ERROR) << "Usage: " << argv[0] << " --discover <token> <player_id>";
+            return 1;
+        }
+        const std::string token = argv[2];
+        const std::string player_id = argv[3];
+        return client.discover_and_run(token, player_id);
+    } else {
+        if (argc < 5) {
+            LOG(ERROR) << "Usage: " << argv[0] << " <host> <port> <token> <player_id> [mode]";
+            return 1;
+        }
+        const std::string host = argv[1];
+        const std::string port = argv[2];
+        const std::string token = argv[3];
+        const std::string player_id = argv[4];
+        const std::string mode = (argc > 5) ? argv[5] : "--interactive";
+        return client.run(host, port, token, mode, player_id);
+    }
+
+    return 0;
 }

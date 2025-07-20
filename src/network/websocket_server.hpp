@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "core/player_registry.hpp"
+#include "udp_discovery_server.hpp"
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -52,10 +53,11 @@ class WebsocketServer : public std::enable_shared_from_this<WebsocketServer> {
   std::vector<std::thread> threads_;
   const std::string secret_token_;
 
+  std::unique_ptr<UdpDiscoveryServer> discovery_server_;
+
   std::mutex sessions_mutex_;
   std::unordered_set<std::shared_ptr<Session>> sessions_;
 
-  // 广播功能
   std::thread broadcast_thread_;
   std::atomic<bool> is_running_{false};
 };

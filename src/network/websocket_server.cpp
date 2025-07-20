@@ -98,7 +98,7 @@ class Session : public std::enable_shared_from_this<Session> {
 
     if (auth_request.token() == secret_token_ && !auth_request.player_id().empty()) {
       is_authenticated_ = true;
-      player_id_ = auth_request.player_id(); // Store the real player ID
+      player_id_ = auth_request.player_id();
       auth_response->set_success(true);
       LOG(INFO) << "Player " << player_id_ << " authenticated successfully.";
     } else {
@@ -149,8 +149,6 @@ class Session : public std::enable_shared_from_this<Session> {
     if (!write_queue_.empty()) {
       do_write();
     } else if (is_authenticated_) {
-      // If we just finished writing and there's nothing else to write,
-      // go back to reading.
       do_read();
     }
   }
@@ -159,7 +157,6 @@ class Session : public std::enable_shared_from_this<Session> {
   bool is_authenticated() const { return is_authenticated_; }
 };
 
-// ... (Listener and WebsocketServer remain the same) ...
 class Listener : public std::enable_shared_from_this<Listener> {
   WebsocketServer& server_;
   net::io_context& ioc_;
@@ -215,6 +212,12 @@ void WebsocketServer::run(const std::string& address_str, uint16_t port,
   listener_ =
       std::make_shared<Listener>(ioc_, tcp::endpoint{address, port}, *this);
   listener_->run();
+
+  const uint16_t discovery_port = 9001;
+  discovery_server_ =
+      std::make_unique<UdpDiscoveryServer>(ioc_, discovery_port, port);
+  discovery_server_->start();
+
   LOG(INFO) << "Server started on " << address_str << ":" << port;
   threads_.reserve(threads_count);
   for (int i = 0; i < threads_count; ++i) {
@@ -225,6 +228,11 @@ void WebsocketServer::run(const std::string& address_str, uint16_t port,
 
 void WebsocketServer::stop() {
   is_running_ = false;
+
+  if (discovery_server_) {
+    discovery_server_->stop();
+  }
+
   ioc_.stop();
   if (broadcast_thread_.joinable()) {
     broadcast_thread_.join();

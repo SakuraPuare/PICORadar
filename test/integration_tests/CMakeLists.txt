@@ -21,6 +21,19 @@ add_test(
             "${CMAKE_BINARY_DIR}" # 传递构建目录
 )
 
+add_test(
+    NAME DiscoveryTest
+    COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/run_discovery_test.sh"
+            "${CMAKE_BINARY_DIR}" # 传递构建目录
+)
+
+# 确保发现测试在广播测试成功后运行
+set_tests_properties(
+    DiscoveryTest
+    PROPERTIES
+    DEPENDS BroadcastTest
+)
+
 # 确保广播测试在认证测试成功后运行
 set_tests_properties(
     BroadcastTest
