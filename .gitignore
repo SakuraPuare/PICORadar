@@ -33,3 +33,5 @@ CMakeUserPresets.json
 # vcpkg
 vcpkg/
 vcpkg_installed/
+
+.idea/

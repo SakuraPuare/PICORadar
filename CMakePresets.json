@@ -8,6 +8,17 @@
         "cacheVariables": {
           "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
         }
+      },
+      {
+        "name": "coverage",
+        "generator": "Ninja",
+        "binaryDir": "${sourceDir}/build-coverage",
+        "cacheVariables": {
+          "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+          "ENABLE_COVERAGE": "ON",
+          "CMAKE_CXX_FLAGS": "--coverage",
+          "CMAKE_C_FLAGS": "--coverage"
+        }
       }
     ]
   }

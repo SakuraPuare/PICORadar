@@ -28,6 +28,38 @@ option(PICORADAR_BUILD_TESTS "构建测试" ON)
 option(PICORADAR_BUILD_SERVER "构建服务端应用" ON)
 option(PICORADAR_BUILD_CLIENT_LIB "构建客户端库" ON)
 option(PICORADAR_BUILD_MOCK_CLIENT "构建模拟客户端" ON)
+option(ENABLE_COVERAGE "启用代码覆盖率" OFF)
+
+# ==============================================================================
+# 覆盖率配置
+# ==============================================================================
+if(ENABLE_COVERAGE)
+    # 设置覆盖率编译标志
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
+    
+    # 设置覆盖率链接标志
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} --coverage")
+    
+    # 查找lcov工具
+    find_program(LCOV_PATH lcov)
+    if(LCOV_PATH)
+        message(STATUS "找到 lcov: ${LCOV_PATH}")
+    else()
+        message(WARNING "未找到 lcov，覆盖率报告生成可能受限")
+    endif()
+    
+    # 查找genhtml工具
+    find_program(GENHTML_PATH genhtml)
+    if(GENHTML_PATH)
+        message(STATUS "找到 genhtml: ${GENHTML_PATH}")
+    else()
+        message(WARNING "未找到 genhtml，HTML覆盖率报告生成可能受限")
+    endif()
+    
+    message(STATUS "覆盖率功能已启用")
+endif()
 
 # ==============================================================================
 # 查找依赖 (通过 vcpkg)
@@ -87,4 +119,9 @@ message(STATUS "  - 构建服务端: ${PICORADAR_BUILD_SERVER}")
 message(STATUS "  - 构建客户端库: ${PICORADAR_BUILD_CLIENT_LIB}")
 message(STATUS "  - 构建模拟客户端: ${PICORADAR_BUILD_MOCK_CLIENT}")
 message(STATUS "  - 构建测试: ${PICORADAR_BUILD_TESTS}")
+message(STATUS "  - 覆盖率功能: ${ENABLE_COVERAGE}")
+if(ENABLE_COVERAGE)
+    message(STATUS "  - lcov: ${LCOV_PATH}")
+    message(STATUS "  - genhtml: ${GENHTML_PATH}")
+endif()
 message(STATUS "========================================")
