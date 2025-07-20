@@ -18,6 +18,7 @@ void fail(beast::error_code ec, char const* what) {
 class Session : public std::enable_shared_from_this<Session> {
   websocket::stream<beast::tcp_stream> ws_;
   beast::flat_buffer buffer_;
+  beast::flat_buffer write_buffer_;
   core::PlayerRegistry& registry_;
   const std::string secret_token_;
   bool is_authenticated_ = false;
@@ -96,6 +97,8 @@ class Session : public std::enable_shared_from_this<Session> {
       ws_.close(websocket::close_code::policy_error);
       return;
     }
+    // 清理读取缓冲区，为下一次读取做准备
+    buffer_.consume(buffer_.size());
 
     if (!message.has_auth_request()) {
       LOG(WARNING) << "Client sent non-auth message before authenticating. "
@@ -105,20 +108,25 @@ class Session : public std::enable_shared_from_this<Session> {
     }
 
     const auto& auth_request = message.auth_request();
+    ServerToClient response;
+    auto* auth_response = response.mutable_auth_response();
+
     if (auth_request.token() == secret_token_) {
       LOG(INFO) << "Client authenticated successfully.";
       is_authenticated_ = true;
-
-      // TODO: 发送 AuthResponse
-
-      // 清空缓冲区并继续读取
-      buffer_.consume(buffer_.size());
-      do_read();
+      auth_response->set_success(true);
+      auth_response->set_message("Authentication successful.");
     } else {
-      LOG(WARNING) << "Client sent invalid token. Closing connection.";
-      // TODO: 发送失败的 AuthResponse
-      ws_.close(websocket::close_code::policy_error);
+      LOG(WARNING) << "Client sent invalid token.";
+      is_authenticated_ = false;
+      auth_response->set_success(false);
+      auth_response->set_message("Invalid token.");
     }
+
+    // 序列化并发送响应
+    std::string serialized_response;
+    response.SerializeToString(&serialized_response);
+    do_write(serialized_response);
   }
 
   void handle_player_data() {
@@ -134,13 +142,38 @@ class Session : public std::enable_shared_from_this<Session> {
         beast::bind_front_handler(&Session::on_write, shared_from_this()));
   }
 
+  void do_write(const std::string& message) {
+    // 将消息放入写入缓冲区
+    write_buffer_.clear();
+    auto n = net::buffer_copy(write_buffer_.prepare(message.size()),
+                              net::buffer(message));
+    write_buffer_.commit(n);
+
+    // 设置为二进制消息
+    ws_.binary(true);
+
+    // 异步发送
+    ws_.async_write(
+        write_buffer_.data(),
+        beast::bind_front_handler(&Session::on_write, shared_from_this()));
+  }
+
   void on_write(beast::error_code ec, std::size_t bytes_transferred) {
     boost::ignore_unused(bytes_transferred);
 
     if (ec) return fail(ec, "write");
 
-    // 清空缓冲区并继续读取
-    buffer_.consume(buffer_.size());
+    // 清空写入缓冲区
+    write_buffer_.consume(write_buffer_.size());
+
+    // 如果认证失败，则在发送完消息后关闭连接
+    if (!is_authenticated_) {
+      // 正常关闭
+      ws_.close(websocket::close_code::normal);
+      return;
+    }
+
+    // 否则，继续读取下一条消息
     do_read();
   }
 };

@@ -13,6 +13,7 @@ target_link_libraries(server_app
     PRIVATE
     # 我们自己项目的库
     network_lib
+    common_lib
     
     # 第三方库
     glog::glog

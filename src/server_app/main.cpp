@@ -3,6 +3,7 @@
 #include <csignal>
 #include <iostream>
 
+#include "common/single_instance_guard.hpp"
 #include "core/player_registry.hpp"
 #include "network/websocket_server.hpp"
 
@@ -25,6 +26,16 @@ int main(int argc, char* argv[]) {
   FLAGS_alsologtostderr = true;
   // 设置日志文件目录
   FLAGS_log_dir = "./logs";
+
+  // 确保只有一个实例在运行
+  std::unique_ptr<picoradar::common::SingleInstanceGuard> guard;
+  try {
+    guard =
+        std::make_unique<picoradar::common::SingleInstanceGuard>("PicoRadar.pid");
+  } catch (const std::runtime_error& e) {
+    LOG(ERROR) << "Failed to start: " << e.what();
+    return 1;
+  }
 
   // 注册信号处理器
   std::signal(SIGINT, signal_handler);
@@ -53,7 +64,16 @@ int main(int argc, char* argv[]) {
 
   // 监听所有网络接口
   const std::string address = "0.0.0.0";
-  const uint16_t port = 9002;
+  uint16_t port = 9002;  // 默认端口
+  if (argc > 1) {
+    try {
+      port = std::stoi(argv[1]);
+    } catch (const std::exception& e) {
+      LOG(ERROR) << "Invalid port number provided. Using default 9002.";
+    }
+  }
+  LOG(INFO) << "Server will listen on port " << port;
+
   const int threads = 4;  // 使用4个线程处理IO
   server->run(address, port, threads);
 
