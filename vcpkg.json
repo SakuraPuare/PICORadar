@@ -1,0 +1,8 @@
+{
+  "name": "picoradar",
+  "version-string": "1.0.0",
+  "dependencies": [
+    "gtest",
+    "protobuf"
+  ]
+}

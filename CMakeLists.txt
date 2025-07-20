@@ -1,0 +1,98 @@
+cmake_minimum_required(VERSION 3.15)
+
+project(PicoRadar VERSION 1.0.0 LANGUAGES CXX)
+
+include(FetchContent)
+
+# 在获取任何内容之前，为旧项目设置兼容性策略
+cmake_policy(SET CMP0067 NEW)
+
+FetchContent_Declare(
+    websocketpp
+    GIT_REPOSITORY https://github.com/zaphoyd/websocketpp.git
+    GIT_TAG 0.8.2
+)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ==============================================================================
+# VCPKG 集成
+# ==============================================================================
+# 如果vcpkg目录存在，则设置工具链文件
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg")
+    set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        CACHE STRING "Vcpkg toolchain file")
+endif()
+
+# ==============================================================================
+# 项目选项
+# ==============================================================================
+option(PICORADAR_BUILD_TESTS "构建测试" ON)
+option(PICORADAR_BUILD_SERVER "构建服务端应用" ON)
+option(PICORADAR_BUILD_CLIENT_LIB "构建客户端库" ON)
+option(PICORADAR_BUILD_MOCK_CLIENT "构建模拟客户端" ON)
+
+# ==============================================================================
+# 查找依赖 (通过 vcpkg)
+# ==============================================================================
+find_package(Protobuf CONFIG REQUIRED)
+find_package(GTest CONFIG REQUIRED)
+
+# ==============================================================================
+# 获取依赖 (通过 FetchContent)
+# ==============================================================================
+FetchContent_MakeAvailable(websocketpp)
+
+set_property(DIRECTORY ${websocketpp_SOURCE_DIR} PROPERTY CMAKE_POLICY_DEFAULT_CMP0067 NEW)
+
+# ==============================================================================
+# Protobuf 代码生成
+# ==============================================================================
+set(PROTO_FILES "${CMAKE_CURRENT_SOURCE_DIR}/proto/player_data.proto")
+set(PROTO_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
+# 创建一个目标来执行protoc编译器
+add_custom_command(
+    OUTPUT "${PROTO_GEN_DIR}/player_data.pb.cc" "${PROTO_GEN_DIR}/player_data.pb.h"
+    COMMAND ${Protobuf_PROTOC_EXECUTABLE}
+        --cpp_out="${PROTO_GEN_DIR}"
+        --proto_path="${CMAKE_CURRENT_SOURCE_DIR}/proto"
+        ${PROTO_FILES}
+    DEPENDS ${PROTO_FILES}
+    COMMENT "Compiling proto files: ${PROTO_FILES}"
+)
+
+# 创建一个自定义目标来封装这个命令
+add_custom_target(generate_proto ALL DEPENDS "${PROTO_GEN_DIR}/player_data.pb.cc" "${PROTO_GEN_DIR}/player_data.pb.h")
+
+# 创建一个接口库来表示生成的代码
+add_library(proto_gen INTERFACE)
+target_include_directories(proto_gen INTERFACE "${PROTO_GEN_DIR}")
+target_link_libraries(proto_gen INTERFACE protobuf::libprotobuf)
+add_dependencies(proto_gen generate_proto)
+
+
+# ==============================================================================
+# 添加子目录
+# ==============================================================================
+add_subdirectory(src)
+
+if(PICORADAR_BUILD_TESTS)
+    add_subdirectory(test)
+endif()
+
+# ==============================================================================
+# 输出构建信息
+# ==============================================================================
+message(STATUS "========================================")
+message(STATUS "PicoRadar 项目配置")
+message(STATUS "  - C++ 标准: ${CMAKE_CXX_STANDARD}")
+message(STATUS "  - Protobuf 库: ${Protobuf_LIBRARIES}")
+message(STATUS "  - GTest 库: ${GTest_LIBRARIES}")
+message(STATUS "  - 构建服务端: ${PICORADAR_BUILD_SERVER}")
+message(STATUS "  - 构建客户端库: ${PICORADAR_BUILD_CLIENT_LIB}")
+message(STATUS "  - 构建模拟客户端: ${PICORADAR_BUILD_MOCK_CLIENT}")
+message(STATUS "  - 构建测试: ${PICORADAR_BUILD_TESTS}")
+message(STATUS "========================================")
