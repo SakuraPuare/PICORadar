@@ -7,6 +7,7 @@ add_library(core_logic
 target_include_directories(core_logic
     PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_BINARY_DIR}/generated" # 包含生成的 protobuf 头文件
 )
 
 target_link_libraries(core_logic

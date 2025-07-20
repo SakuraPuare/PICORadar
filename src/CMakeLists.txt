@@ -3,8 +3,8 @@
 # 核心逻辑库 (始终需要)
 add_subdirectory(core)
 
-# 网络库 (待办)
-# add_subdirectory(network)
+# 网络库
+add_subdirectory(network)
 
 # 公共代码库 (待办)
 # add_subdirectory(common)

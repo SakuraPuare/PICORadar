@@ -23,7 +23,8 @@
 
 *   [x] 根据 `README.md` 的定义创建项目目录结构。
 *   [x] 初始化项目的 `CMakeLists.txt` 文件。
-*   [x] 设置依赖管理器 (vcpkg + FetchContent) 并获取 `protobuf`, `gtest`, `websocketpp` 库。
+*   [x] **技术栈变更**: 依赖库从 `websocketpp` (FetchContent) 迁移至 `Boost.Beast` (vcpkg)。
+*   [x] 设置依赖管理器 (vcpkg) 并获取 `protobuf`, `gtest`, `boost-beast`, `glog` 库。
 *   [x] 实现 `proto/player_data.proto` 文件。
 *   [x] 编写脚本将 `.proto` 文件编译为C++代码，并集成到构建流程中。
 *   [x] 创建 `server_app` 可执行程序的初始框架。
@@ -33,10 +34,12 @@
 ### 阶段 2：服务端实现
 
 *   [x] 实现用于管理玩家状态列表（增、删、改）的 `core` 核心逻辑。
-*   **>** 实现核心的WebSocket服务器逻辑（监听、接受连接）。
+*   [x] 配置并集成 GoogleTest 测试框架，为 `core` 模块编写单元测试。
+*   [x] 使用 `Boost.Beast` 实现核心的WebSocket服务器逻辑（监听、接受连接）。
+*   **>** 集成 `glog` 日志库，替换所有原生 `cout` 输出。
 *   [ ] 实现基于预共享令牌的鉴权机制。
 *   [ ] 实现数据广播循环。
-*   [ ] 实现用于处理断连的超时/心- 跳机制。
+*   [ ] 实现用于处理断连的超时/心跳机制。
 *   [ ] 实现UDP服务发现协议的服务端逻辑。
 *   [ ] 开发一个基础的命令行界面（CLI）来监控服务器状态（如在线玩家数）。
 
@@ -57,11 +60,9 @@
 
 ### 阶段 4：测试、优化与文档
 
-*   [x] 配置并集成 GoogleTest 测试框架。
-*   [x] 为 `core` 服务器核心逻辑编写全面的单元测试。
 *   [ ] 使用 `mock_client` 对服务器进行集成测试和压力测试。
 *   [ ] 在测试环境中实现视觉平滑算法（插值）。
-*   [ ] 执行并撰写正式的性能基- 准测试，创建 `PERFORMANCE.md`。
+*   [ ] 执行并撰写正式的性能基准测试，创建 `PERFORMANCE.md`。
 *   [ ] 撰写详细的 `DESIGN.md` 和 `USER_GUIDE.md`。
 *   [ ] 使用 Doxygen 生成 `API_REFERENCE.md`。
 

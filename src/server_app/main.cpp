@@ -1,35 +1,64 @@
 #include <iostream>
-#include "player_data.pb.h" // 包含生成的Protobuf头文件
+#include <csignal>
+#include <glog/logging.h>
+
+#include "core/player_registry.hpp"
+#include "network/websocket_server.hpp"
+
+// 创建一个全局的原子布尔值，用于优雅地处理Ctrl+C信号
+static volatile std::atomic<bool> g_stop_signal(false);
+
+// SIGINT (Ctrl+C) 的处理函数
+void signal_handler(int signal) {
+    if (signal == SIGINT) {
+        LOG(INFO) << "Caught SIGINT, shutting down...";
+        g_stop_signal = true;
+    }
+}
 
 int main(int argc, char* argv[]) {
-    // 验证Protobuf代码生成是否正常工作
-    picoradar::PlayerData player;
-    player.set_player_id("player_01");
-    player.mutable_position()->set_x(1.0f);
-    player.mutable_position()->set_y(2.0f);
-    player.mutable_position()->set_z(3.0f);
+    // 初始化 glog
+    google::InitGoogleLogging(argv[0]);
+    // 将日志同时输出到标准错误流和文件
+    FLAGS_logtostderr = false;
+    FLAGS_alsologtostderr = true;
+    // 设置日志文件目录
+    FLAGS_log_dir = "./logs";
+    
+    // 注册信号处理器
+    std::signal(SIGINT, signal_handler);
 
-    std::cout << "PICO Radar Server" << std::endl;
-    std::cout << "=================" << std::endl;
-    std::cout << "Successfully initialized." << std::endl;
-    std::cout << "Protobuf test: Player ID '" << player.player_id() 
-              << "' at position (" << player.position().x()
-              << ", " << player.position().y()
-              << ", " << player.position().z() << ")" << std::endl;
+    LOG(INFO) << "PICO Radar Server Starting...";
+    LOG(INFO) << "============================";
 
-    // 检查命令行参数
-    if (argc > 1) {
-        std::cout << "Launched with " << argc - 1 << " arguments:" << std::endl;
-        for (int i = 1; i < argc; ++i) {
-            std::cout << "  - " << argv[i] << std::endl;
-        }
+    // 创建核心模块
+    auto registry = std::make_shared<picoradar::core::PlayerRegistry>();
+
+    // 创建并运行网络服务器
+    std::shared_ptr<picoradar::network::WebsocketServer> server;
+    try {
+        server = std::make_shared<picoradar::network::WebsocketServer>(*registry);
+    } catch (const std::exception& e) {
+        LOG(FATAL) << "Failed to create server: " << e.what();
+        return 1;
+    }
+    
+    // 监听所有网络接口
+    const std::string address = "0.0.0.0";
+    const uint16_t port = 9002;
+    const int threads = 4; // 使用4个线程处理IO
+    server->run(address, port, threads);
+
+    // 等待停止信号
+    while (!g_stop_signal) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    // TODO:
-    // 1. 初始化WebSocket服务器
-    // 2. 启动监听循环
-    // 3. 实现服务发现
-    // 4. ...
+    // 停止服务器
+    server->stop();
+
+    LOG(INFO) << "Shutdown complete.";
+    google::ShutdownGoogleLogging();
 
     return 0;
 }

@@ -1,16 +1,19 @@
 # src/server_app/CMakeLists.txt
 
-add_executable(server_app main.cpp)
+add_executable(server_app
+    main.cpp
+)
+
+target_include_directories(server_app
+    PRIVATE
+    "${CMAKE_SOURCE_DIR}/src"
+)
 
 target_link_libraries(server_app
     PRIVATE
-    # 添加我们自己项目的库
-    core_logic
+    # 我们自己项目的库
+    network_lib
     
-    # 添加第三方库
-    protobuf::libprotobuf
-    ${WEBSOCKETPP_LIBRARIES}
+    # 第三方库
+    glog::glog
 )
-
-# 包含生成的proto代码
-target_link_libraries(server_app PRIVATE proto_gen)

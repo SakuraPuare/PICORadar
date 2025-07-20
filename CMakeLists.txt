@@ -1,17 +1,6 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.16)
 
 project(PicoRadar VERSION 1.0.0 LANGUAGES CXX)
-
-include(FetchContent)
-
-# 在获取任何内容之前，为旧项目设置兼容性策略
-cmake_policy(SET CMP0067 NEW)
-
-FetchContent_Declare(
-    websocketpp
-    GIT_REPOSITORY https://github.com/zaphoyd/websocketpp.git
-    GIT_TAG 0.8.2
-)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -39,13 +28,8 @@ option(PICORADAR_BUILD_MOCK_CLIENT "构建模拟客户端" ON)
 # ==============================================================================
 find_package(Protobuf CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
-
-# ==============================================================================
-# 获取依赖 (通过 FetchContent)
-# ==============================================================================
-FetchContent_MakeAvailable(websocketpp)
-
-set_property(DIRECTORY ${websocketpp_SOURCE_DIR} PROPERTY CMAKE_POLICY_DEFAULT_CMP0067 NEW)
+find_package(glog CONFIG REQUIRED)
+find_package(Boost CONFIG REQUIRED COMPONENTS system thread) # Beast是头文件库，但依赖system
 
 # ==============================================================================
 # Protobuf 代码生成
@@ -95,6 +79,8 @@ message(STATUS "PicoRadar 项目配置")
 message(STATUS "  - C++ 标准: ${CMAKE_CXX_STANDARD}")
 message(STATUS "  - Protobuf 库: ${Protobuf_LIBRARIES}")
 message(STATUS "  - GTest 库: ${GTest_LIBRARIES}")
+message(STATUS "  - glog 库: ${glog_LIBRARIES}")
+message(STATUS "  - Boost 库: ${Boost_LIBRARIES}")
 message(STATUS "  - 构建服务端: ${PICORADAR_BUILD_SERVER}")
 message(STATUS "  - 构建客户端库: ${PICORADAR_BUILD_CLIENT_LIB}")
 message(STATUS "  - 构建模拟客户端: ${PICORADAR_BUILD_MOCK_CLIENT}")
