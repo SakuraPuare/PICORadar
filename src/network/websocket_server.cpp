@@ -1,4 +1,5 @@
 #include "websocket_server.hpp"
+#include "player_data.pb.h"
 #include <glog/logging.h>
 #include <boost/asio/signal_set.hpp>
 
@@ -15,10 +16,15 @@ class Session : public std::enable_shared_from_this<Session> {
     websocket::stream<beast::tcp_stream> ws_;
     beast::flat_buffer buffer_;
     core::PlayerRegistry& registry_;
-
+    const std::string secret_token_;
+    bool is_authenticated_ = false;
+    
 public:
-    Session(tcp::socket&& socket, core::PlayerRegistry& registry)
-        : ws_(std::move(socket)), registry_(registry) {}
+    Session(tcp::socket&& socket, core::PlayerRegistry& registry, std::string secret_token)
+        : ws_(std::move(socket))
+        , registry_(registry)
+        , secret_token_(std::move(secret_token))
+    {}
 
     void run() {
         // 我们需要在strand上执行所有操作，以确保线程安全
@@ -68,6 +74,46 @@ public:
 
         if (ec) return fail(ec, "read");
 
+        // 检查是否已认证
+        if (!is_authenticated_) {
+            handle_auth();
+        } else {
+            handle_player_data();
+        }
+    }
+
+    void handle_auth() {
+        ClientToServer message;
+        if (!message.ParseFromArray(buffer_.data().data(), buffer_.size())) {
+            LOG(WARNING) << "Failed to parse message from client. Closing connection.";
+            ws_.close(websocket::close_code::policy_error);
+            return;
+        }
+
+        if (!message.has_auth_request()) {
+            LOG(WARNING) << "Client sent non-auth message before authenticating. Closing connection.";
+            ws_.close(websocket::close_code::policy_error);
+            return;
+        }
+
+        const auto& auth_request = message.auth_request();
+        if (auth_request.token() == secret_token_) {
+            LOG(INFO) << "Client authenticated successfully.";
+            is_authenticated_ = true;
+            
+            // TODO: 发送 AuthResponse
+            
+            // 清空缓冲区并继续读取
+            buffer_.consume(buffer_.size());
+            do_read();
+        } else {
+            LOG(WARNING) << "Client sent invalid token. Closing connection.";
+            // TODO: 发送失败的 AuthResponse
+            ws_.close(websocket::close_code::policy_error);
+        }
+    }
+
+    void handle_player_data() {
         // TODO:
         // 1. 反序列化 buffer_ 中的消息
         // 2. 处理消息
@@ -79,6 +125,7 @@ public:
             buffer_.data(),
             beast::bind_front_handler(&Session::on_write, shared_from_this()));
     }
+
 
     void on_write(beast::error_code ec, std::size_t bytes_transferred) {
         boost::ignore_unused(bytes_transferred);
@@ -96,10 +143,15 @@ class Listener : public std::enable_shared_from_this<Listener> {
     net::io_context& ioc_;
     tcp::acceptor acceptor_;
     core::PlayerRegistry& registry_;
+    const std::string secret_token_;
 
 public:
-    Listener(net::io_context& ioc, tcp::endpoint endpoint, core::PlayerRegistry& registry)
-        : ioc_(ioc), acceptor_(ioc), registry_(registry) {
+    Listener(net::io_context& ioc, tcp::endpoint endpoint, core::PlayerRegistry& registry, std::string secret_token)
+        : ioc_(ioc)
+        , acceptor_(ioc)
+        , registry_(registry)
+        , secret_token_(std::move(secret_token))
+    {
         beast::error_code ec;
 
         acceptor_.open(endpoint.protocol(), ec);
@@ -142,7 +194,7 @@ private:
         if (ec) return fail(ec, "accept");
 
         // 创建一个新的会话并运行它
-        std::make_shared<Session>(std::move(socket), registry_)->run();
+        std::make_shared<Session>(std::move(socket), registry_, secret_token_)->run();
 
         // 继续接受下一个连接
         do_accept();
@@ -151,8 +203,10 @@ private:
 
 // --- WebsocketServer 实现 ---
 
-WebsocketServer::WebsocketServer(core::PlayerRegistry& registry)
-    : registry_(registry) {}
+WebsocketServer::WebsocketServer(core::PlayerRegistry& registry, std::string secret_token)
+    : registry_(registry)
+    , secret_token_(std::move(secret_token))
+{}
 
 WebsocketServer::~WebsocketServer() {
     if (!ioc_.stopped()) {
@@ -164,7 +218,7 @@ void WebsocketServer::run(const std::string& address_str, uint16_t port, int thr
     auto const address = net::ip::make_address(address_str);
 
     // 创建并运行 Listener
-    listener_ = std::make_shared<Listener>(ioc_, tcp::endpoint{address, port}, registry_);
+    listener_ = std::make_shared<Listener>(ioc_, tcp::endpoint{address, port}, registry_, secret_token_);
     listener_->run();
 
     LOG(INFO) << "Server started on " << address_str << ":" << port;

@@ -31,13 +31,18 @@ int main(int argc, char* argv[]) {
     LOG(INFO) << "PICO Radar Server Starting...";
     LOG(INFO) << "============================";
 
+    // 定义预共享令牌
+    // TODO: 未来从配置文件或环境变量加载
+    const std::string secret_token = "pico-radar-super-secret-token-!@#$";
+    LOG(INFO) << "Using secret token (first 8 chars): " << secret_token.substr(0, 8) << "...";
+
     // 创建核心模块
     auto registry = std::make_shared<picoradar::core::PlayerRegistry>();
 
     // 创建并运行网络服务器
     std::shared_ptr<picoradar::network::WebsocketServer> server;
     try {
-        server = std::make_shared<picoradar::network::WebsocketServer>(*registry);
+        server = std::make_shared<picoradar::network::WebsocketServer>(*registry, secret_token);
     } catch (const std::exception& e) {
         LOG(FATAL) << "Failed to create server: " << e.what();
         return 1;

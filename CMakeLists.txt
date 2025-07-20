@@ -6,6 +6,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# 生成 compile_commands.json 文件，供 linter 使用
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # ==============================================================================
 # VCPKG 集成
 # ==============================================================================
@@ -32,33 +35,29 @@ find_package(glog CONFIG REQUIRED)
 find_package(Boost CONFIG REQUIRED COMPONENTS system thread) # Beast是头文件库，但依赖system
 
 # ==============================================================================
-# Protobuf 代码生成
+# Protobuf 代码生成 (Modern CMake)
 # ==============================================================================
-set(PROTO_FILES "${CMAKE_CURRENT_SOURCE_DIR}/proto/player_data.proto")
-set(PROTO_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
-
-# 确保生成目录存在
-file(MAKE_DIRECTORY "${PROTO_GEN_DIR}")
-
-# 创建一个目标来执行protoc编译器
-add_custom_command(
-    OUTPUT "${PROTO_GEN_DIR}/player_data.pb.cc" "${PROTO_GEN_DIR}/player_data.pb.h"
-    COMMAND ${Protobuf_PROTOC_EXECUTABLE}
-        --cpp_out="${PROTO_GEN_DIR}"
-        --proto_path="${CMAKE_CURRENT_SOURCE_DIR}/proto"
-        ${PROTO_FILES}
-    DEPENDS ${PROTO_FILES}
-    COMMENT "Compiling proto files: ${PROTO_FILES}"
+# 使用现代 CMake 函数 protobuf_generate
+# 1. 创建一个库目标，并将 .proto 文件作为其“源”文件
+add_library(proto_gen STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/proto/player_data.proto"
 )
 
-# 创建一个自定义目标来封装这个命令
-add_custom_target(generate_proto ALL DEPENDS "${PROTO_GEN_DIR}/player_data.pb.cc" "${PROTO_GEN_DIR}/player_data.pb.h")
+# 2. 调用 protobuf_generate 将生成的 .pb.cc 和 .pb.h 添加到 proto_gen 目标
+protobuf_generate(
+    TARGET proto_gen
+    # 指定 .proto 文件的根目录，以便 import 正常工作
+    IMPORT_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/proto"
+)
 
-# 创建一个库来表示生成的代码
-add_library(proto_gen STATIC "${PROTO_GEN_DIR}/player_data.pb.cc" "${PROTO_GEN_DIR}/player_data.pb.h")
-target_include_directories(proto_gen PUBLIC "${PROTO_GEN_DIR}")
+# 3. 将 protobuf 运行时库链接到我们的生成库
 target_link_libraries(proto_gen PUBLIC protobuf::libprotobuf)
-add_dependencies(proto_gen generate_proto)
+
+# 4. 将二进制目录（生成代码的位置）添加到包含路径中
+target_include_directories(proto_gen PUBLIC
+    "${CMAKE_CURRENT_BINARY_DIR}"
+)
+
 
 
 # ==============================================================================

@@ -26,7 +26,7 @@ class Listener;
 
 class WebsocketServer : public std::enable_shared_from_this<WebsocketServer> {
 public:
-    WebsocketServer(core::PlayerRegistry& registry);
+    WebsocketServer(core::PlayerRegistry& registry, std::string secret_token);
     ~WebsocketServer();
 
     // 禁止拷贝和赋值
@@ -53,6 +53,7 @@ private:
     net::io_context ioc_;
     std::shared_ptr<Listener> listener_;
     std::vector<std::thread> threads_;
+    const std::string secret_token_;
 };
 
 } // namespace network

@@ -1,0 +1,23 @@
+# .clangd 配置文件
+# 用于配置 clangd 语言服务器的行为
+
+# 编译数据库路径
+CompileFlags:
+  CompilationDatabase: build
+
+# 包含路径
+  Add:
+    - -I./src
+    - -I./src/core
+    - -I./src/network
+    - -I./build/generated
+
+# 诊断设置
+Diagnostics:
+  ClangTidy:
+    Add: [performance-*, modernize-*, readability-*]
+    Remove: [performance-unnecessary-value-param]
+
+# 代码补全设置
+Index:
+  Background: Build
