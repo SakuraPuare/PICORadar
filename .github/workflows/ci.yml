@@ -25,10 +25,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # We need the vcpkg submodule
+          # We need the vcpkg submodule for dependencies
           submodules: 'recursive'
 
-      # 2. Cache vcpkg dependencies to speed up subsequent runs
+      # 2. Install Ninja for faster builds
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      # 3. Cache vcpkg dependencies to speed up subsequent runs
       - name: Cache vcpkg dependencies
         uses: actions/cache@v4
         with:
@@ -39,23 +43,22 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-vcpkg-
 
-      # 3. Install dependencies using vcpkg
+      # 4. Install dependencies using vcpkg
       - name: Install dependencies
         run: vcpkg install --triplet x64-linux
 
-      # 4. Configure CMake
-      #    This step generates the build files and the compile_commands.json
+      # 5. Configure CMake using Ninja generator
       - name: Configure CMake
         run: >
-          cmake -B build -S .
+          cmake -G Ninja -B build -S .
           -DCMAKE_BUILD_TYPE=Debug
           -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
 
-      # 5. Build the project
+      # 6. Build the project
       - name: Build project
         run: cmake --build build --config Debug
 
-      # 6. Run tests using CTest
+      # 7. Run tests using CTest
       - name: Run tests
         working-directory: ./build
         # --output-on-failure will print the test output if it fails
