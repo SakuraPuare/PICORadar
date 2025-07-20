@@ -1,145 +1,83 @@
-# PICO Radar：实时位置共享系统
+# 📡 PICO Radar
 
-## 第一部分：项目愿景与目标
+![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)
+![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-orange.svg)
+![Build](https://img.shields.io/badge/build-CMake-green.svg)
+![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)
+[![CI](https://github.com/sakurapuare/PicoRadar/actions/workflows/ci.yml/badge.svg)](https://github.com/sakurapuare/PicoRadar/actions/workflows/ci.yml)
 
-### 1. 项目概述
+**PICO Radar: 一个为多用户、共处一室的VR体验设计的实时、低延迟位置共享系统。**
 
-PICO Radar 是一个为多用户、共处一室的VR体验设计的实时、低延迟位置共享系统。其核心使命是通过在每位玩家的头显中精确渲染其他玩家的虚拟形象，来防止在大型共享物理空间中可能发生的物理碰撞。
+其核心使命是通过在每位玩家的头显中精确渲染其他玩家的虚拟形象，来防止在大型共享物理空间中可能发生的物理碰撞。
 
-本系统完全在局域网（LAN/WLAN）内部署和运行，确保其独立、高速且不依赖任何外部互联网连接。
+---
 
-### 2. 核心特性与需求
+## 核心特性
 
--   **多玩家支持**：稳定支持最多20名玩家同时在线。
--   **低延迟传输**：保证端到端延迟低于100毫秒。
--   **跨应用同步**：无论玩家正在体验哪个VR应用或影片，其位置数据都能被共享。
--   **精确形象渲染**：根据玩家的物理位置和头部朝向，实时正确地显示其虚拟形象。
--   **零配置连接**：PICO设备能自动发现并连接到服务器，无需任何手动IP地址配置。
--   **健壮与可靠**：系统经过精心设计，能够优雅地处理临时的网络断连和数据包抖动等常见问题。
+-   **多玩家支持**: 稳定支持最多20名玩家同时在线。
+-   **低延迟传输**: 保证端到端延迟低于100毫秒，完全在局域网内部署。
+-   **零配置连接**: 客户端通过UDP广播自动发现并连接服务器，无需手动配置IP。
+-   **安全可靠**: 基于预共享令牌的客户端鉴权和优雅的断连处理。
+-   **高性能核心**: 基于C++17和Boost.Asio构建的异步、多线程网络服务器。
+-   **跨平台构建**: 使用现代CMake和vcpkg，确保在Linux和Windows上的可复现构建。
 
-## 第二部分：系统设计与架构
+## 项目状态
 
-### 3. 系统架构
+**第一阶段已完成**
 
-系统采用经典的 **客户端/服务器 (Client/Server)** 模型：
+-   ✅ **服务端**: 功能完整，包括连接管理、安全鉴权、数据广播和自动发现。
+-   ✅ **模拟客户端**: 功能完整，可用于完整的端到端集成测试。
+-   ✅ **质量保障**: 拥有覆盖核心逻辑的单元测试和覆盖所有关键场景的集成测试，并已配置CI/CD流水线。
+-   🚧 **客户端库 (`client_lib`)**: **正在进行中**。这是项目下一阶段的核心任务。
 
--   **服务端 (Server)**：一个运行在专用主机上的C++应用程序。作为所有玩家数据的权威中心，它负责管理连接、处理状态更新，并将信息广播给所有连接的客户端。
--   **客户端 (Client)**：一个集成到PICO VR应用（例如Unreal Engine项目）中的C++库。它负责捕获本地玩家数据，发送给服务器，并接收关于所有其他玩家的数据以渲染他们的虚拟形象。
+查阅我们的[**开发路线图 (ROADMAP.md)**](ROADMAP.md)以获取详细的开发计划。
 
-### 4. 技术选型
+## 快速上手
 
--   **编程语言**：**C++ (标准: C++17)**，以获得极致的性能、控制力与跨平台能力。
--   **通讯协议**：**WebSocket (基于TCP)**，使用 **Boost.Beast** 库实现，用于可靠、低开销、持久化的全双工通信。
--   **数据序列化**：**Protocol Buffers (Protobuf)**，用于高效、快速且强类型的二进制数据交换。
--   **日志系统**：**Google glog**，用于高性能、多级别的日志记录。
--   **构建系统**：**CMake**，用于统一的、跨平台的项目构建。
--   **依赖管理**：**vcpkg**，用于简化第三方库的管理。
+### 依赖
 
-### 5. 通讯协议
+-   C++17 编译器 (GCC, Clang, MSVC)
+-   CMake (3.16+)
+-   Ninja (推荐)
+-   Git
 
-#### 5.1. 服务端发现 (UDP广播)
+所有C++库依赖（Boost, Protobuf, glog, gtest）都通过`vcpkg`自动管理。
 
-为实现零配置的用户体验，客户端通过以下流程自动发现服务器：
-1.  服务器启动后，在局域网内广播自己的存在。
-2.  客户端启动时，监听此广播。
-3.  一旦探测到服务器，客户端即可获得建立WebSocket连接所需的IP地址和端口。
+### 构建
 
-#### 5.2. 用户鉴权 (预共享令牌)
+```bash
+# 1. 克隆仓库 (确保使用 --recursive 拉取子模块)
+git clone --recursive https://github.com/YourUsername/PicoRadar.git
+cd PicoRadar
 
-为保证安全，只有经过授权的客户端才能连接：
-1.  一个秘密的令牌（Token）被预先配置在服务器和客户端库中。
-2.  通过WebSocket连接后，客户端的第一个动作就是发送包含此令牌的鉴权请求。
-3.  服务器验证令牌。若有效，则将连接标记为“已认证”；否则，连接将被立即终止。
+# 2. 配置CMake (vcpkg将自动安装所有依赖)
+#    首次配置会花费一些时间用于编译依赖库
+cmake -B build -S . -G Ninja -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
 
-#### 5.3. 数据结构 (Protobuf)
-
-所有网络消息都在 `.proto` 文件中定义。
-
-**文件: `proto/player_data.proto`**
-```protobuf
-syntax = "proto3";
-
-package picoradar;
-
-message Vector3 { float x=1; float y=2; float z=3; }
-message Quaternion { float x=1; float y=2; float z=3; float w=4; }
-
-message PlayerData {
-  string player_id = 1;       // 玩家唯一ID
-  string scene_id = 2;        // 场景ID
-  Vector3 position = 3;       // 世界坐标
-  Quaternion rotation = 4;    // 头部朝向
-  int64 timestamp = 5;        // 时间戳 (毫秒)
-}
-
-// ... (其他消息定义保持不变)
+# 3. 构建项目
+cmake --build build
 ```
 
-### 6. 详细功能分解
+### 运行服务器
 
-#### 6.1. 服务端职责
--   **连接管理**：管理WebSocket连接并执行强制鉴权。
--   **状态管理**：维护一个权威的、实时的所有已认证玩家及其最新`PlayerData`的列表。
--   **数据校验**：对传入数据进行有效性检查，拒绝无效或损坏的数据包。
--   **数据广播**：以固定频率（如20Hz）向每个已认证的客户端广播完整的玩家列表。
--   **超时处理**：实现心跳/超时机制，以检测并优雅地处理客户端断连。
+```bash
+# 运行服务器，使用默认端口9002
+./build/src/server_app/server_app
 
-#### 6.2. 客户端职责
--   **数据上报**：捕获本地玩家的位置/旋转信息并发送至服务器，并通过设置变化阈值来优化带宽。
--   **视觉平滑**：实现插值（Lerp/Slerp）及可选的外插值算法，确保远程玩家形象移动平滑，以掩盖网络抖动或轻微的丢包。
--   **连接韧性**：自动处理断连，并在后台尝试重连服务器。
-
-### 7. 架构决策
-
-我们明确选择 **WebSocket (TCP)** 而非UDP。尽管UDP理论延迟更低，但TCP的 **可靠性**（保证送达和顺序）对于本应用是至关重要的。它能从根本上防止因丢包导致的虚拟形象卡顿或瞬移——这种糟糕的用户体验远比几毫秒稳定的额外延迟更具破坏性。局域网环境确保了这点延迟开销可以忽略不计。
-
-## 第三部分：工程与质量
-
-### 8. 开发准则
-
--   **现代C++**：遵循C++17的最佳实践。
--   **RAII**：零手动内存管理。所有资源由智能指针和其他RAII类型管理。
--   **代码风格**：由`clang-format`强制执行的统一代码风格。
--   **`const`正确性**：严格使用`const`来构建安全、可预测的代码库。
-
-### 9. 项目结构
-
-```
-PicoRadar/
-├── build/
-├── docs/
-├── proto/
-├── src/
-│   ├── core/
-│   ├── network/
-│   ├── server_app/
-│   └── common/
-├── test/
-│   ├── core_tests/
-│   └── mock_client/
-└── vcpkg.json
+# 或指定一个端口
+./build/src/server_app/server_app 9999
 ```
 
-### 10. 构建、依赖与兼容性
+## 文档
 
--   项目使用 **CMake** 构建，确保可以在Linux和Windows上编译。
--   所有第三方依赖（`Boost.Beast`, `glog`, `protobuf`, `gtest`）均通过 **vcpkg** 进行管理。
--   **`client_lib`** 被编译为一个独立的静态库，并提供简洁的C风格或纯C++ API，以确保能轻松集成到Unreal Engine中，避免紧耦合。
+-   [**技术设计文档 (DESIGN.md)**](DESIGN.md): 深入了解系统架构、技术选型和实现细节。
+-   [**开发路线图 (ROADMAP.md)**](ROADMAP.md): 查看项目的功能规划和当前进度。
+-   [**开发日志 (blogs/)**](blogs/): 关注我们从零到一的完整开发心路历程。
 
-### 11. 测试策略
+## 贡献
 
--   **单元测试**：使用 **GoogleTest** 对`core`核心逻辑模块进行详尽的单元测试，目标是接近100%的代码覆盖率。
--   **集成与压力测试**：开发一个 **`mock_client`**（模拟客户端）应用来模拟数十个玩家，以便在没有硬件的情况下对服务器的功能和性能进行彻底的负载测试。
--   **性能基准测试**：建立一个正式流程，用于在各种条件下测量和报告关键指标（延迟、CPU/内存负载、带宽）。
+我们欢迎任何形式的贡献！请查阅[**贡献指南 (CONTRIBUTING.md)**](CONTRIBUTING.md)来开始。
 
-## 第四部分：项目交付物
+## 许可
 
-### 12. 文档套件
-
-本项目将附带一套完整的文档：
--   `README.md`: 本文档。
--   `ROADMAP.md`: 跟踪开发进度和里程碑。
--   `DESIGN.md`: 深入的技术设计细节。
--   `API_REFERENCE.md`: 为`client_lib`自动生成的API文档。
--   `USER_GUIDE.md`: 关于如何部署和运行服务器的说明。
--   `PERFORMANCE.md`: 正式的性能基准测试报告。
+本项目采用 [MIT许可](LICENSE.txt)。
