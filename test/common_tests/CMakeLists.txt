@@ -15,6 +15,10 @@ target_link_libraries(common_tests
     glog::glog
 )
 
+if(ENABLE_COVERAGE)
+    target_link_libraries(common_tests PRIVATE --coverage)
+endif()
+
 # 注册测试脚本
 add_test(
     NAME StaleLockTest

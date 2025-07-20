@@ -14,3 +14,16 @@ add_test(
     COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/run_auth_success_test.sh"
             "${CMAKE_BINARY_DIR}" # 传递构建目录
 )
+
+add_test(
+    NAME BroadcastTest
+    COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/run_broadcast_test.sh"
+            "${CMAKE_BINARY_DIR}" # 传递构建目录
+)
+
+# 确保广播测试在认证测试成功后运行
+set_tests_properties(
+    BroadcastTest
+    PROPERTIES
+    DEPENDS AuthSuccessTest
+)

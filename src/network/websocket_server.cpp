@@ -2,66 +2,62 @@
 
 #include <glog/logging.h>
 
+#include <boost/asio/post.hpp>
 #include <boost/asio/signal_set.hpp>
+#include <chrono>
 
 #include "player_data.pb.h"
 
 namespace picoradar {
 namespace network {
 
-// 报告错误
 void fail(beast::error_code ec, char const* what) {
+  if (ec == net::error::operation_aborted || ec == websocket::error::closed ||
+      ec == net::error::connection_reset) {
+    return;
+  }
   LOG(ERROR) << what << ": " << ec.message();
 }
 
-// 处理单个WebSocket会话
 class Session : public std::enable_shared_from_this<Session> {
+  WebsocketServer& server_;
   websocket::stream<beast::tcp_stream> ws_;
   beast::flat_buffer buffer_;
-  beast::flat_buffer write_buffer_;
+  std::vector<std::shared_ptr<const std::string>> write_queue_;
   core::PlayerRegistry& registry_;
   const std::string secret_token_;
   bool is_authenticated_ = false;
+  std::string player_id_;
 
  public:
   Session(tcp::socket&& socket, core::PlayerRegistry& registry,
-          std::string secret_token)
-      : ws_(std::move(socket)),
+          std::string secret_token, WebsocketServer& server)
+      : server_(server),
+        ws_(std::move(socket)),
         registry_(registry),
         secret_token_(std::move(secret_token)) {}
 
-  void run() {
-    // 我们需要在strand上执行所有操作，以确保线程安全
-    net::dispatch(
-        ws_.get_executor(),
-        beast::bind_front_handler(&Session::on_run, shared_from_this()));
+  ~Session() {
+    server_.unregister_session(shared_from_this());
+    if (!player_id_.empty()) {
+      registry_.removePlayer(player_id_);
+    }
   }
 
-  void on_run() {
-    // 设置建议的超时选项
+  void run() {
     ws_.set_option(
         websocket::stream_base::timeout::suggested(beast::role_type::server));
-
-    // 设置一个装饰器，用于添加服务器HTTP头
     ws_.set_option(
         websocket::stream_base::decorator([](websocket::response_type& res) {
           res.set(http::field::server, std::string(BOOST_BEAST_VERSION_STRING) +
                                            " picoradar-websocket-server");
         }));
-
-    // 接受WebSocket握手
     ws_.async_accept(
         beast::bind_front_handler(&Session::on_accept, shared_from_this()));
   }
 
   void on_accept(beast::error_code ec) {
     if (ec) return fail(ec, "accept");
-
-    LOG(INFO)
-        << "Client connected: "
-        << ws_.next_layer().socket().remote_endpoint().address().to_string();
-
-    // 开始读取消息
     do_read();
   }
 
@@ -70,18 +66,11 @@ class Session : public std::enable_shared_from_this<Session> {
                                                       shared_from_this()));
   }
 
-  void on_read(beast::error_code ec, std::size_t bytes_transferred) {
-    boost::ignore_unused(bytes_transferred);
-
-    if (ec == websocket::error::closed) {
-      LOG(INFO) << "Client disconnected.";
-      // TODO: 从 registry_ 中移除玩家
-      return;
+  void on_read(beast::error_code ec, std::size_t) {
+    if (ec) {
+      return fail(ec, "read");
     }
 
-    if (ec) return fail(ec, "read");
-
-    // 检查是否已认证
     if (!is_authenticated_) {
       handle_auth();
     } else {
@@ -92,18 +81,14 @@ class Session : public std::enable_shared_from_this<Session> {
   void handle_auth() {
     ClientToServer message;
     if (!message.ParseFromArray(buffer_.data().data(), buffer_.size())) {
-      LOG(WARNING)
-          << "Failed to parse message from client. Closing connection.";
-      ws_.close(websocket::close_code::policy_error);
+      buffer_.consume(buffer_.size());
+      do_read();
       return;
     }
-    // 清理读取缓冲区，为下一次读取做准备
     buffer_.consume(buffer_.size());
 
     if (!message.has_auth_request()) {
-      LOG(WARNING) << "Client sent non-auth message before authenticating. "
-                      "Closing connection.";
-      ws_.close(websocket::close_code::policy_error);
+      do_read();
       return;
     }
 
@@ -111,112 +96,87 @@ class Session : public std::enable_shared_from_this<Session> {
     ServerToClient response;
     auto* auth_response = response.mutable_auth_response();
 
-    if (auth_request.token() == secret_token_) {
-      LOG(INFO) << "Client authenticated successfully.";
+    if (auth_request.token() == secret_token_ && !auth_request.player_id().empty()) {
       is_authenticated_ = true;
+      player_id_ = auth_request.player_id(); // Store the real player ID
       auth_response->set_success(true);
-      auth_response->set_message("Authentication successful.");
+      LOG(INFO) << "Player " << player_id_ << " authenticated successfully.";
     } else {
-      LOG(WARNING) << "Client sent invalid token.";
       is_authenticated_ = false;
       auth_response->set_success(false);
-      auth_response->set_message("Invalid token.");
     }
-
-    // 序列化并发送响应
-    std::string serialized_response;
-    response.SerializeToString(&serialized_response);
-    do_write(serialized_response);
+    auto ss = std::make_shared<const std::string>(response.SerializeAsString());
+    send(ss);
   }
 
   void handle_player_data() {
-    // TODO:
-    // 1. 反序列化 buffer_ 中的消息
-    // 2. 处理消息
-    // 3. 更新 registry_
-
-    // 现在只做回显
-    ws_.text(ws_.got_text());
-    ws_.async_write(
-        buffer_.data(),
-        beast::bind_front_handler(&Session::on_write, shared_from_this()));
-  }
-
-  void do_write(const std::string& message) {
-    // 将消息放入写入缓冲区
-    write_buffer_.clear();
-    auto n = net::buffer_copy(write_buffer_.prepare(message.size()),
-                              net::buffer(message));
-    write_buffer_.commit(n);
-
-    // 设置为二进制消息
-    ws_.binary(true);
-
-    // 异步发送
-    ws_.async_write(
-        write_buffer_.data(),
-        beast::bind_front_handler(&Session::on_write, shared_from_this()));
-  }
-
-  void on_write(beast::error_code ec, std::size_t bytes_transferred) {
-    boost::ignore_unused(bytes_transferred);
-
-    if (ec) return fail(ec, "write");
-
-    // 清空写入缓冲区
-    write_buffer_.consume(write_buffer_.size());
-
-    // 如果认证失败，则在发送完消息后关闭连接
-    if (!is_authenticated_) {
-      // 正常关闭
-      ws_.close(websocket::close_code::normal);
-      return;
+    ClientToServer message;
+    if (message.ParseFromArray(buffer_.data().data(), buffer_.size()) && message.has_player_data()) {
+      auto player_data = message.player_data();
+      player_data.set_player_id(player_id_);
+      registry_.updatePlayer(player_data);
     }
-
-    // 否则，继续读取下一条消息
+    buffer_.consume(buffer_.size());
     do_read();
   }
-};
 
-// 接受新的连接
-class Listener : public std::enable_shared_from_this<Listener> {
-  net::io_context& ioc_;
-  tcp::acceptor acceptor_;
-  core::PlayerRegistry& registry_;
-  const std::string secret_token_;
+  void send(std::shared_ptr<const std::string> const& ss) {
+    net::post(ws_.get_executor(),
+              beast::bind_front_handler(&Session::on_send, shared_from_this(),
+                                        ss));
+  }
+
+ private:
+  void on_send(std::shared_ptr<const std::string> const& ss) {
+    write_queue_.push_back(ss);
+    if (write_queue_.size() > 1) return;
+    do_write();
+  }
+
+  void do_write() {
+    if (write_queue_.empty()) return;
+    ws_.binary(true);
+    ws_.async_write(
+        net::buffer(*write_queue_.front()),
+        beast::bind_front_handler(&Session::on_write, shared_from_this()));
+  }
+
+  void on_write(beast::error_code ec, std::size_t) {
+    if (ec) return fail(ec, "write");
+
+    write_queue_.erase(write_queue_.begin());
+
+    if (!write_queue_.empty()) {
+      do_write();
+    } else if (is_authenticated_) {
+      // If we just finished writing and there's nothing else to write,
+      // go back to reading.
+      do_read();
+    }
+  }
 
  public:
-  Listener(net::io_context& ioc, tcp::endpoint endpoint,
-           core::PlayerRegistry& registry, std::string secret_token)
-      : ioc_(ioc),
-        acceptor_(ioc),
-        registry_(registry),
-        secret_token_(std::move(secret_token)) {
+  bool is_authenticated() const { return is_authenticated_; }
+};
+
+// ... (Listener and WebsocketServer remain the same) ...
+class Listener : public std::enable_shared_from_this<Listener> {
+  WebsocketServer& server_;
+  net::io_context& ioc_;
+  tcp::acceptor acceptor_;
+
+ public:
+  Listener(net::io_context& ioc, tcp::endpoint endpoint, WebsocketServer& server)
+      : server_(server), ioc_(ioc), acceptor_(ioc) {
     beast::error_code ec;
-
     acceptor_.open(endpoint.protocol(), ec);
-    if (ec) {
-      fail(ec, "open");
-      throw beast::system_error{ec};
-    }
-
+    if (ec) throw beast::system_error{ec};
     acceptor_.set_option(net::socket_base::reuse_address(true), ec);
-    if (ec) {
-      fail(ec, "set_option");
-      throw beast::system_error{ec};
-    }
-
+    if (ec) throw beast::system_error{ec};
     acceptor_.bind(endpoint, ec);
-    if (ec) {
-      fail(ec, "bind");
-      throw beast::system_error{ec};
-    }
-
+    if (ec) throw beast::system_error{ec};
     acceptor_.listen(net::socket_base::max_listen_connections, ec);
-    if (ec) {
-      fail(ec, "listen");
-      throw beast::system_error{ec};
-    }
+    if (ec) throw beast::system_error{ec};
   }
 
   void run() { do_accept(); }
@@ -230,60 +190,95 @@ class Listener : public std::enable_shared_from_this<Listener> {
 
   void on_accept(beast::error_code ec, tcp::socket socket) {
     if (ec) return fail(ec, "accept");
-
-    // 创建一个新的会话并运行它
-    std::make_shared<Session>(std::move(socket), registry_, secret_token_)
-        ->run();
-
-    // 继续接受下一个连接
+    auto session = std::make_shared<Session>(
+        std::move(socket), server_.registry_, server_.secret_token_, server_);
+    server_.register_session(session);
+    session->run();
     do_accept();
   }
 };
-
-// --- WebsocketServer 实现 ---
 
 WebsocketServer::WebsocketServer(core::PlayerRegistry& registry,
                                  std::string secret_token)
     : registry_(registry), secret_token_(std::move(secret_token)) {}
 
 WebsocketServer::~WebsocketServer() {
-  if (!ioc_.stopped()) {
+  if (is_running_.load()) {
     stop();
   }
 }
 
 void WebsocketServer::run(const std::string& address_str, uint16_t port,
                           int threads_count) {
+  is_running_ = true;
   auto const address = net::ip::make_address(address_str);
-
-  // 创建并运行 Listener
-  listener_ = std::make_shared<Listener>(ioc_, tcp::endpoint{address, port},
-                                         registry_, secret_token_);
+  listener_ =
+      std::make_shared<Listener>(ioc_, tcp::endpoint{address, port}, *this);
   listener_->run();
-
   LOG(INFO) << "Server started on " << address_str << ":" << port;
-
-  // 创建工作线程池
   threads_.reserve(threads_count);
   for (int i = 0; i < threads_count; ++i) {
     threads_.emplace_back([this] { ioc_.run(); });
   }
+  broadcast_thread_ = std::thread(&WebsocketServer::broadcast_loop, this);
 }
 
 void WebsocketServer::stop() {
-  LOG(INFO) << "Stopping server...";
-
-  // 停止 io_context 将导致所有异步操作完成并退出 run()
+  is_running_ = false;
   ioc_.stop();
-
-  // 等待所有线程完成
+  if (broadcast_thread_.joinable()) {
+    broadcast_thread_.join();
+  }
   for (auto& thread : threads_) {
     if (thread.joinable()) {
       thread.join();
     }
   }
-
   LOG(INFO) << "Server stopped.";
+}
+
+void WebsocketServer::register_session(std::shared_ptr<Session> session) {
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  sessions_.insert(session);
+}
+
+void WebsocketServer::unregister_session(std::shared_ptr<Session> session) {
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  sessions_.erase(session);
+}
+
+void WebsocketServer::broadcast_loop() {
+  while (is_running_) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    auto const players = registry_.getAllPlayers();
+    if (players.empty()) {
+      continue;
+    }
+
+    ServerToClient message;
+    auto* player_list = message.mutable_player_list();
+    for (const auto& player : players) {
+      player_list->add_players()->CopyFrom(player);
+    }
+    
+    auto const ss = std::make_shared<const std::string>(message.SerializeAsString());
+
+    std::vector<std::shared_ptr<Session>> recipients;
+    {
+      std::lock_guard<std::mutex> lock(sessions_mutex_);
+      recipients.reserve(sessions_.size());
+      for (auto const& session : sessions_) {
+        if (session->is_authenticated()) {
+          recipients.push_back(session);
+        }
+      }
+    }
+
+    for (auto const& recipient : recipients) {
+      recipient->send(ss);
+    }
+  }
 }
 
 }  // namespace network

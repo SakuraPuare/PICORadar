@@ -47,7 +47,7 @@ fi
 
 # 运行客户端
 echo "Running client with correct token..."
-timeout 10s "$CLIENT_EXE" 127.0.0.1 "$PORT" "$CORRECT_TOKEN" --test-auth-success
+timeout 10s "$CLIENT_EXE" 127.0.0.1 "$PORT" "$CORRECT_TOKEN" "auth_success_tester" --test-auth-success
 CLIENT_EXIT_CODE=$?
 
 # 清理服务器

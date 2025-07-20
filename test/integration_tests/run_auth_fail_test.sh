@@ -46,7 +46,7 @@ fi
 
 # 运行客户端
 echo "Running client with wrong token..."
-timeout 10s "$CLIENT_EXE" 127.0.0.1 "$PORT" "wrong-token" --test-auth-fail
+timeout 10s "$CLIENT_EXE" 127.0.0.1 "$PORT" "wrong-token" "auth_fail_tester" --test-auth-fail
 CLIENT_EXIT_CODE=$?
 
 # 清理服务器

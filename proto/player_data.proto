@@ -26,6 +26,7 @@ message PlayerData {
 // --- 鉴权消息 ---
 message AuthRequest {
   string token = 1; // 预共享的秘密令牌
+  string player_id = 2; // 客户端的玩家ID
 }
 
 message AuthResponse {
