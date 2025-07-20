@@ -1,0 +1,25 @@
+# This file configures clang-tidy for the PICO Radar project.
+# It defines a set of static analysis checks to find potential bugs,
+# performance issues, and style violations.
+#
+# To run checks and apply automatic fixes on a file, you need a compilation
+# database (compile_commands.json). Then run:
+#   clang-tidy <file-path> -p <build-directory> --fix
+#
+Checks: >
+  -*,
+  bugprone-*,
+  google-*,
+  modernize-*,
+  performance-*,
+  readability-*
+
+WarningsAsErrors: []
+
+HeaderFilterRegex: '.*'
+
+# Example of disabling a specific check if it becomes too noisy:
+# Checks: >
+#   ...
+#   -modernize-use-trailing-return-type
+#

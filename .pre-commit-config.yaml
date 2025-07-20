@@ -1,0 +1,38 @@
+# This file configures pre-commit hooks for the PICO Radar project.
+# It automates code formatting and static analysis to ensure code quality
+# before it gets committed.
+#
+# SETUP INSTRUCTIONS:
+# 1. Install pre-commit:
+#      pip install pre-commit
+#
+# 2. Install the git hooks:
+#      pre-commit install
+#
+# 3. Generate the compilation database for clang-tidy:
+#      (This is now handled automatically by our CMakeLists.txt)
+#      cd build && cmake ..
+#
+# USAGE:
+# The hooks will run automatically on `git commit`.
+# To run against all files manually:
+#   pre-commit run --all-files
+
+repos:
+-   repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v18.1.0
+    hooks:
+    -   id: clang-format
+        types_or: [c++, c]
+        args: ['-i'] # Apply changes in-place
+
+-   repo: https://github.com/pocc/pre-commit-hooks
+    rev: v1.3.5
+    hooks:
+    -   id: clang-tidy
+        types_or: [c++, c]
+        args:
+        - --fix
+        # Tell clang-tidy where to find the compilation database.
+        # Our build process creates it in the 'build' directory.
+        - -p=build

@@ -1,0 +1,17 @@
+# This file configures clang-format for the PICO Radar project.
+# It enforces a consistent code style across the entire codebase.
+#
+# Style Guide: Google C++ Style Guide
+# For details, see: https://google.github.io/styleguide/cppguide.html
+#
+# To format a file, run:
+#   clang-format -i <file-path>
+#
+Language: Cpp
+BasedOnStyle: Google
+
+# We can add project-specific customizations below if needed.
+# For now, we will adhere strictly to the Google style.
+# Example:
+# IndentWidth: 4
+# ColumnLimit: 100
