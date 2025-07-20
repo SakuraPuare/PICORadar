@@ -53,6 +53,9 @@ set_property(DIRECTORY ${websocketpp_SOURCE_DIR} PROPERTY CMAKE_POLICY_DEFAULT_C
 set(PROTO_FILES "${CMAKE_CURRENT_SOURCE_DIR}/proto/player_data.proto")
 set(PROTO_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
+# 确保生成目录存在
+file(MAKE_DIRECTORY "${PROTO_GEN_DIR}")
+
 # 创建一个目标来执行protoc编译器
 add_custom_command(
     OUTPUT "${PROTO_GEN_DIR}/player_data.pb.cc" "${PROTO_GEN_DIR}/player_data.pb.h"
@@ -67,10 +70,10 @@ add_custom_command(
 # 创建一个自定义目标来封装这个命令
 add_custom_target(generate_proto ALL DEPENDS "${PROTO_GEN_DIR}/player_data.pb.cc" "${PROTO_GEN_DIR}/player_data.pb.h")
 
-# 创建一个接口库来表示生成的代码
-add_library(proto_gen INTERFACE)
-target_include_directories(proto_gen INTERFACE "${PROTO_GEN_DIR}")
-target_link_libraries(proto_gen INTERFACE protobuf::libprotobuf)
+# 创建一个库来表示生成的代码
+add_library(proto_gen STATIC "${PROTO_GEN_DIR}/player_data.pb.cc" "${PROTO_GEN_DIR}/player_data.pb.h")
+target_include_directories(proto_gen PUBLIC "${PROTO_GEN_DIR}")
+target_link_libraries(proto_gen PUBLIC protobuf::libprotobuf)
 add_dependencies(proto_gen generate_proto)
 
 
@@ -80,6 +83,7 @@ add_dependencies(proto_gen generate_proto)
 add_subdirectory(src)
 
 if(PICORADAR_BUILD_TESTS)
+    enable_testing()
     add_subdirectory(test)
 endif()
 

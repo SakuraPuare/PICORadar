@@ -5,12 +5,11 @@ add_executable(server_app main.cpp)
 target_link_libraries(server_app
     PRIVATE
     # 添加我们自己项目的库
-    # core_logic
-    # network_lib
+    core_logic
     
     # 添加第三方库
     protobuf::libprotobuf
-    websocketpp::websocketpp
+    ${WEBSOCKETPP_LIBRARIES}
 )
 
 # 包含生成的proto代码

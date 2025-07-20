@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package picoradar;
+
+// 三维向量
+message Vector3 {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+}
+
+// 四元数
+message Quaternion {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+  float w = 4;
+}
+
+// 玩家核心数据
+message PlayerData {
+  string player_id = 1;       // 玩家的唯一标识符
+  string scene_id = 2;        // 玩家所在的场景或房间ID
+  Vector3 position = 3;       // 玩家在世界空间中的位置
+  Quaternion rotation = 4;    // 玩家头部的朝向
+  int64 timestamp = 5;        // 数据生成时的时间戳 (UTC毫秒)
+}
+
+// ===================================================================
+// 网络消息定义
+// ===================================================================
+
+// 客户端 -> 服务端 的消息
+
+// 鉴权请求
+message AuthRequest {
+  string token = 1;           // 预共享的秘密令牌
+}
+
+// 客户端发送给服务端的消息体
+message ClientToServer {
+  oneof message_type {
+    AuthRequest auth_request = 1;
+    PlayerData player_data = 2;
+  }
+}
+
+
+// 服务端 -> 客户端 的消息
+
+// 鉴权响应
+message AuthResponse {
+  bool success = 1;           // 是否成功
+  string message = 2;         // 附加信息 (如：失败原因)
+}
+
+// 服务端广播给客户端的消息体
+
+// 当有玩家数据更新时，服务端发送此消息
+message PlayerDataUpdate {
+  repeated PlayerData players = 1; // 所有在线玩家的列表
+}
+
+message ServerToClient {
+  oneof message_type {
+    AuthResponse auth_response = 1;
+    PlayerDataUpdate player_update = 2; 
+  }
+}
