@@ -18,11 +18,10 @@
 #include <cstdlib>
 #endif
 
-namespace picoradar {
-namespace common {
+namespace picoradar::common {
 
 // ... (get_temp_dir_path 辅助函数保持不变) ...
-std::string get_temp_dir_path() {
+auto get_temp_dir_path() -> std::string {
 #ifdef _WIN32
   char temp_path[MAX_PATH];
   if (GetTempPathA(MAX_PATH, temp_path) == 0) {
@@ -39,7 +38,7 @@ std::string get_temp_dir_path() {
 }
 
 // 辅助函数：从锁文件中读取PID
-ProcessId read_pid_from_lockfile(const std::string& path) {
+auto read_pid_from_lockfile(const std::string& path) -> ProcessId {
   std::ifstream file(path);
   if (!file.is_open()) {
     return 0;
@@ -151,5 +150,4 @@ SingleInstanceGuard::~SingleInstanceGuard() {
 }
 #endif
 
-}  // namespace common
-}  // namespace picoradar
+}  // namespace picoradar::common

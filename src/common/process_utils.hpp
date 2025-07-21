@@ -6,8 +6,7 @@
 #include <sys/types.h>
 #endif
 
-namespace picoradar {
-namespace common {
+namespace picoradar::common {
 
 #ifdef _WIN32
 using ProcessId = DWORD;
@@ -20,7 +19,6 @@ using ProcessId = pid_t;
  * @param pid 要检查的进程ID。
  * @return 如果进程正在运行，则为true；否则为false。
  */
-bool is_process_running(ProcessId pid);
+auto is_process_running(ProcessId pid) -> bool;
 
-}  // namespace common
-}  // namespace picoradar
+}  // namespace picoradar::common

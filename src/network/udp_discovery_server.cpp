@@ -2,8 +2,7 @@
 
 #include <glog/logging.h>
 
-namespace picoradar {
-namespace network {
+namespace picoradar::network {
 
 const std::string DISCOVERY_REQUEST = "PICO_RADAR_DISCOVERY_REQUEST";
 const std::string DISCOVERY_RESPONSE_PREFIX = "PICO_RADAR_SERVER:";
@@ -65,5 +64,4 @@ void UdpDiscoveryServer::do_receive() {
       });
 }
 
-}  // namespace network
-}  // namespace picoradar
+}  // namespace picoradar::network

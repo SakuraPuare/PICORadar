@@ -8,8 +8,7 @@
 
 #include "player_data.pb.h"
 
-namespace picoradar {
-namespace network {
+namespace picoradar::network {
 
 void fail(beast::error_code ec, char const* what) {
   if (ec == net::error::operation_aborted || ec == websocket::error::closed ||
@@ -57,7 +56,12 @@ class Session : public std::enable_shared_from_this<Session> {
   }
 
   void on_accept(beast::error_code ec) {
-    if (ec) return fail(ec, "accept");
+    if (ec) {
+      {
+        fail(ec, "accept");
+      }
+      return;
+    }
     do_read();
   }
 
@@ -66,9 +70,10 @@ class Session : public std::enable_shared_from_this<Session> {
                                                       shared_from_this()));
   }
 
-  void on_read(beast::error_code ec, std::size_t) {
+  void on_read(beast::error_code ec, std::size_t /*unused*/) {
     if (ec) {
-      return fail(ec, "read");
+      fail(ec, "read");
+      return;
     }
 
     if (!is_authenticated_) {
@@ -131,20 +136,29 @@ class Session : public std::enable_shared_from_this<Session> {
  private:
   void on_send(std::shared_ptr<const std::string> const& ss) {
     write_queue_.push_back(ss);
-    if (write_queue_.size() > 1) return;
+    if (write_queue_.size() > 1) {
+      return;
+    }
     do_write();
   }
 
   void do_write() {
-    if (write_queue_.empty()) return;
+    if (write_queue_.empty()) {
+      return;
+    }
     ws_.binary(true);
     ws_.async_write(
         net::buffer(*write_queue_.front()),
         beast::bind_front_handler(&Session::on_write, shared_from_this()));
   }
 
-  void on_write(beast::error_code ec, std::size_t) {
-    if (ec) return fail(ec, "write");
+  void on_write(beast::error_code ec, std::size_t /*unused*/) {
+    if (ec) {
+      {
+        fail(ec, "write");
+      }
+      return;
+    }
 
     write_queue_.erase(write_queue_.begin());
 
@@ -156,7 +170,7 @@ class Session : public std::enable_shared_from_this<Session> {
   }
 
  public:
-  bool is_authenticated() const { return is_authenticated_; }
+  auto is_authenticated() const -> bool { return is_authenticated_; }
 };
 
 class Listener : public std::enable_shared_from_this<Listener> {
@@ -165,18 +179,26 @@ class Listener : public std::enable_shared_from_this<Listener> {
   tcp::acceptor acceptor_;
 
  public:
-  Listener(net::io_context& ioc, tcp::endpoint endpoint,
+  Listener(net::io_context& ioc, const tcp::endpoint& endpoint,
            WebsocketServer& server)
       : server_(server), ioc_(ioc), acceptor_(ioc) {
     beast::error_code ec;
     acceptor_.open(endpoint.protocol(), ec);
-    if (ec) throw beast::system_error{ec};
+    if (ec) {
+      throw beast::system_error{ec};
+    }
     acceptor_.set_option(net::socket_base::reuse_address(true), ec);
-    if (ec) throw beast::system_error{ec};
+    if (ec) {
+      throw beast::system_error{ec};
+    }
     acceptor_.bind(endpoint, ec);
-    if (ec) throw beast::system_error{ec};
+    if (ec) {
+      throw beast::system_error{ec};
+    }
     acceptor_.listen(net::socket_base::max_listen_connections, ec);
-    if (ec) throw beast::system_error{ec};
+    if (ec) {
+      throw beast::system_error{ec};
+    }
   }
 
   void run() { do_accept(); }
@@ -189,7 +211,12 @@ class Listener : public std::enable_shared_from_this<Listener> {
   }
 
   void on_accept(beast::error_code ec, tcp::socket socket) {
-    if (ec) return fail(ec, "accept");
+    if (ec) {
+      {
+        fail(ec, "accept");
+      }
+      return;
+    }
     auto session = std::make_shared<Session>(
         std::move(socket), server_.registry_, server_.secret_token_, server_);
     server_.register_session(session);
@@ -248,12 +275,14 @@ void WebsocketServer::stop() {
   LOG(INFO) << "Server stopped.";
 }
 
-void WebsocketServer::register_session(std::shared_ptr<Session> session) {
+void WebsocketServer::register_session(
+    const std::shared_ptr<Session>& session) {
   std::lock_guard<std::mutex> lock(sessions_mutex_);
   sessions_.insert(session);
 }
 
-void WebsocketServer::unregister_session(std::shared_ptr<Session> session) {
+void WebsocketServer::unregister_session(
+    const std::shared_ptr<Session>& session) {
   std::lock_guard<std::mutex> lock(sessions_mutex_);
   sessions_.erase(session);
 }
@@ -293,5 +322,4 @@ void WebsocketServer::broadcast_loop() {
   }
 }
 
-}  // namespace network
-}  // namespace picoradar
+}  // namespace picoradar::network

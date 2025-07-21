@@ -8,8 +8,7 @@
 
 #include "player_data.pb.h"  // Protobuf 生成的代码
 
-namespace picoradar {
-namespace core {
+namespace picoradar::core {
 
 class PlayerRegistry {
  public:
@@ -18,7 +17,7 @@ class PlayerRegistry {
 
   // 禁止拷贝和赋值
   PlayerRegistry(const PlayerRegistry&) = delete;
-  PlayerRegistry& operator=(const PlayerRegistry&) = delete;
+  auto operator=(const PlayerRegistry&) -> PlayerRegistry& = delete;
 
   /**
    * @brief 添加或更新一个玩家的数据。
@@ -41,7 +40,7 @@ class PlayerRegistry {
    *
    * @return 包含所有玩家数据的vector
    */
-  std::vector<picoradar::PlayerData> getAllPlayers() const;
+  auto getAllPlayers() const -> std::vector<picoradar::PlayerData>;
 
   /**
    * @brief 获取特定ID的玩家数据。
@@ -49,13 +48,13 @@ class PlayerRegistry {
    * @param playerId 玩家ID
    * @return 如果找到，返回玩家数据的unique_ptr；否则返回nullptr。
    */
-  std::unique_ptr<picoradar::PlayerData> getPlayer(
-      const std::string& playerId) const;
+  auto getPlayer(const std::string& playerId) const
+      -> std::unique_ptr<picoradar::PlayerData>;
 
   /**
    * @brief 获取当前玩家数量。
    */
-  size_t getPlayerCount() const;
+  auto getPlayerCount() const -> size_t;
 
  private:
   // 使用unordered_map以获得O(1)的平均查找效率
@@ -65,5 +64,4 @@ class PlayerRegistry {
   mutable std::mutex mutex_;
 };
 
-}  // namespace core
-}  // namespace picoradar
+}  // namespace picoradar::core

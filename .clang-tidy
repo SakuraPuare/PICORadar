@@ -14,12 +14,6 @@ Checks: >
   performance-*,
   readability-*
 
-WarningsAsErrors: []
+WarningsAsErrors: ''
 
 HeaderFilterRegex: '.*'
-
-# Example of disabling a specific check if it becomes too noisy:
-# Checks: >
-#   ...
-#   -modernize-use-trailing-return-type
-#

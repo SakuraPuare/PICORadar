@@ -18,7 +18,7 @@ void signal_handler(int signal) {
   }
 }
 
-int main(int argc, char* argv[]) {
+auto main(int argc, char* argv[]) -> int {
   // 初始化 glog
   google::InitGoogleLogging(argv[0]);
   // 将日志同时输出到标准错误流和文件
@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
   LOG(INFO) << "============================";
 
   // 定义预共享令牌
-  // TODO: 未来从配置文件或环境变量加载
+  // TODO(sakurapuare): 未来从配置文件或环境变量加载
   const std::string secret_token = "pico-radar-super-secret-token-!@#$";
   LOG(INFO) << "Using secret token (first 8 chars): "
             << secret_token.substr(0, 8) << "...";

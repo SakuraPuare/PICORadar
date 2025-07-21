@@ -21,8 +21,7 @@ namespace websocket = beast::websocket;
 namespace net = boost::asio;
 using tcp = boost::asio::ip::tcp;
 
-namespace picoradar {
-namespace network {
+namespace picoradar::network {
 
 class Listener;
 class Session;
@@ -33,13 +32,13 @@ class WebsocketServer : public std::enable_shared_from_this<WebsocketServer> {
   ~WebsocketServer();
 
   WebsocketServer(const WebsocketServer&) = delete;
-  WebsocketServer& operator=(const WebsocketServer&) = delete;
+  auto operator=(const WebsocketServer&) -> WebsocketServer& = delete;
 
   void run(const std::string& address, uint16_t port, int threads);
   void stop();
 
-  void register_session(std::shared_ptr<Session> session);
-  void unregister_session(std::shared_ptr<Session> session);
+  void register_session(const std::shared_ptr<Session>& session);
+  void unregister_session(const std::shared_ptr<Session>& session);
 
  private:
   void broadcast_loop();
@@ -62,5 +61,4 @@ class WebsocketServer : public std::enable_shared_from_this<WebsocketServer> {
   std::atomic<bool> is_running_{false};
 };
 
-}  // namespace network
-}  // namespace picoradar
+}  // namespace picoradar::network

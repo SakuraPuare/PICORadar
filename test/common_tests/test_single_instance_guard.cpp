@@ -41,7 +41,7 @@ void run_check_mode() {
   }
 }
 
-int main(int argc, char** argv) {
+auto main(int argc, char** argv) -> int {
   google::InitGoogleLogging(argv[0]);
 
   if (argc != 2) {

@@ -1,11 +1,10 @@
 #include "player_registry.hpp"
 
-namespace picoradar {
-namespace core {
+namespace picoradar::core {
 
-PlayerRegistry::PlayerRegistry() {}
+PlayerRegistry::PlayerRegistry() = default;
 
-PlayerRegistry::~PlayerRegistry() {}
+PlayerRegistry::~PlayerRegistry() = default;
 
 void PlayerRegistry::updatePlayer(const picoradar::PlayerData& data) {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -19,7 +18,8 @@ void PlayerRegistry::removePlayer(const std::string& playerId) {
   players_.erase(playerId);
 }
 
-std::vector<picoradar::PlayerData> PlayerRegistry::getAllPlayers() const {
+auto PlayerRegistry::getAllPlayers() const
+    -> std::vector<picoradar::PlayerData> {
   std::lock_guard<std::mutex> lock(mutex_);
   std::vector<picoradar::PlayerData> allPlayers;
   allPlayers.reserve(players_.size());  // 预分配内存以提高效率
@@ -29,8 +29,8 @@ std::vector<picoradar::PlayerData> PlayerRegistry::getAllPlayers() const {
   return allPlayers;
 }
 
-std::unique_ptr<picoradar::PlayerData> PlayerRegistry::getPlayer(
-    const std::string& playerId) const {
+auto PlayerRegistry::getPlayer(const std::string& playerId) const
+    -> std::unique_ptr<picoradar::PlayerData> {
   std::lock_guard<std::mutex> lock(mutex_);
   auto it = players_.find(playerId);
   if (it != players_.end()) {
@@ -39,10 +39,9 @@ std::unique_ptr<picoradar::PlayerData> PlayerRegistry::getPlayer(
   return nullptr;
 }
 
-size_t PlayerRegistry::getPlayerCount() const {
+auto PlayerRegistry::getPlayerCount() const -> size_t {
   std::lock_guard<std::mutex> lock(mutex_);
   return players_.size();
 }
 
-}  // namespace core
-}  // namespace picoradar
+}  // namespace picoradar::core

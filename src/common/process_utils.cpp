@@ -7,8 +7,7 @@
 #include <csignal>
 #endif
 
-namespace picoradar {
-namespace common {
+namespace picoradar::common {
 
 #ifdef _WIN32
 // --- Windows 实现 ---
@@ -25,7 +24,7 @@ bool is_process_running(ProcessId pid) {
 }
 #else
 // --- POSIX 实现 ---
-bool is_process_running(ProcessId pid) {
+auto is_process_running(ProcessId pid) -> bool {
   if (pid <= 0) {
     return false;
   }
@@ -40,5 +39,4 @@ bool is_process_running(ProcessId pid) {
 }
 #endif
 
-}  // namespace common
-}  // namespace picoradar
+}  // namespace picoradar::common

@@ -24,7 +24,8 @@ void fail(beast::error_code ec, char const* what) {
   LOG(ERROR) << what << ": " << ec.message();
 }
 
-std::pair<std::string, std::string> split_address(const std::string& s) {
+auto split_address(const std::string& s)
+    -> std::pair<std::string, std::string> {
   size_t pos = s.find(':');
   if (pos == std::string::npos) {
     return {"", ""};
@@ -36,7 +37,8 @@ class SyncClient {
  public:
   SyncClient() : resolver_(ioc_), ws_(ioc_) {}
 
-  int discover_and_run(const std::string& token, const std::string& player_id) {
+  auto discover_and_run(const std::string& token, const std::string& player_id)
+      -> int {
     try {
       LOG(INFO) << "Attempting to discover server via UDP broadcast...";
       udp::socket socket(ioc_);
@@ -72,17 +74,17 @@ class SyncClient {
     }
   }
 
-  int run(const std::string& host, const std::string& port,
-          const std::string& token, const std::string& mode,
-          const std::string& player_id) {
+  auto run(const std::string& host, const std::string& port,
+           const std::string& token, const std::string& mode,
+           const std::string& player_id) -> int {
     host_ = host;
     port_ = port;
     return run_internal(token, mode, player_id);
   }
 
  private:
-  int run_internal(const std::string& token, const std::string& mode,
-                   const std::string& player_id) {
+  auto run_internal(const std::string& token, const std::string& mode,
+                    const std::string& player_id) -> int {
     try {
       auto const results = resolver_.resolve(host_, port_);
       net::connect(ws_.next_layer(), results.begin(), results.end());
@@ -99,10 +101,18 @@ class SyncClient {
         return (mode == "--test-auth-fail") ? 0 : 1;
       }
 
-      if (mode == "--test-auth-success") return 0;
-      if (mode == "--seed-data") return seed_data();
-      if (mode == "--test-broadcast") return test_broadcast();
-      if (mode == "--interactive") return interactive_listen();
+      if (mode == "--test-auth-success") {
+        return 0;
+      }
+      if (mode == "--seed-data") {
+        return seed_data();
+      }
+      if (mode == "--test-broadcast") {
+        return test_broadcast();
+      }
+      if (mode == "--interactive") {
+        return interactive_listen();
+      }
 
       LOG(ERROR) << "Unknown client mode: " << mode;
       return 1;
@@ -118,7 +128,8 @@ class SyncClient {
     }
   }
 
-  bool authenticate(const std::string& token, const std::string& player_id) {
+  auto authenticate(const std::string& token, const std::string& player_id)
+      -> bool {
     picoradar::ClientToServer auth_message;
     auto* auth_request = auth_message.mutable_auth_request();
     auth_request->set_token(token);
@@ -143,12 +154,12 @@ class SyncClient {
     return response.auth_response().success();
   }
 
-  int seed_data() {
+  auto seed_data() -> int {
     LOG(INFO) << "Seeding data...";
     picoradar::ClientToServer seed_message;
     auto* player_data = seed_message.mutable_player_data();
     player_data->set_player_id("seeder_client");
-    player_data->mutable_position()->set_x(1.23f);
+    player_data->mutable_position()->set_x(1.23F);
 
     std::string serialized_seed;
     seed_message.SerializeToString(&serialized_seed);
@@ -162,7 +173,7 @@ class SyncClient {
     return 0;
   }
 
-  int test_broadcast() {
+  auto test_broadcast() -> int {
     LOG(INFO) << "Waiting for broadcast...";
     beast::flat_buffer buffer;
     ws_.read(buffer);
@@ -179,13 +190,12 @@ class SyncClient {
     if (response.player_list().players_size() > 0) {
       LOG(INFO) << "Broadcast test PASSED.";
       return 0;
-    } else {
-      LOG(ERROR) << "Broadcast test FAILED: player list was empty.";
-      return 1;
     }
+    LOG(ERROR) << "Broadcast test FAILED: player list was empty.";
+    return 1;
   }
 
-  int interactive_listen() {
+  auto interactive_listen() -> int {
     LOG(INFO) << "Entering interactive listen mode...";
     for (;;) {
       beast::flat_buffer buffer;
@@ -212,7 +222,7 @@ class SyncClient {
   websocket::stream<tcp::socket> ws_;
 };
 
-int main(int argc, char** argv) {
+auto main(int argc, char** argv) -> int {
   google::InitGoogleLogging(argv[0]);
   FLAGS_logtostderr = true;
 

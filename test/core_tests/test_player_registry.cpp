@@ -6,7 +6,7 @@
 using namespace picoradar::core;
 
 // 创建一个辅助函数来生成测试用的玩家数据
-picoradar::PlayerData createTestPlayer(const std::string& id, float x) {
+auto createTestPlayer(const std::string& id, float x) -> picoradar::PlayerData {
   picoradar::PlayerData player;
   player.set_player_id(id);
   player.mutable_position()->set_x(x);
@@ -27,20 +27,20 @@ TEST_F(PlayerRegistryTest, InitialState) {
 
 // 测试用例: 添加单个玩家
 TEST_F(PlayerRegistryTest, AddSinglePlayer) {
-  auto p1 = createTestPlayer("player1", 1.0f);
+  auto p1 = createTestPlayer("player1", 1.0F);
   registry.updatePlayer(p1);
 
   EXPECT_EQ(registry.getPlayerCount(), 1);
   auto retrieved = registry.getPlayer("player1");
   ASSERT_NE(retrieved, nullptr);
   EXPECT_EQ(retrieved->player_id(), "player1");
-  EXPECT_FLOAT_EQ(retrieved->position().x(), 1.0f);
+  EXPECT_FLOAT_EQ(retrieved->position().x(), 1.0F);
 }
 
 // 测试用例: 添加多个玩家
 TEST_F(PlayerRegistryTest, AddMultiplePlayers) {
-  registry.updatePlayer(createTestPlayer("player1", 1.0f));
-  registry.updatePlayer(createTestPlayer("player2", 2.0f));
+  registry.updatePlayer(createTestPlayer("player1", 1.0F));
+  registry.updatePlayer(createTestPlayer("player2", 2.0F));
 
   EXPECT_EQ(registry.getPlayerCount(), 2);
 
@@ -51,8 +51,12 @@ TEST_F(PlayerRegistryTest, AddMultiplePlayers) {
   bool p1_found = false;
   bool p2_found = false;
   for (const auto& p : players) {
-    if (p.player_id() == "player1") p1_found = true;
-    if (p.player_id() == "player2") p2_found = true;
+    if (p.player_id() == "player1") {
+      p1_found = true;
+    }
+    if (p.player_id() == "player2") {
+      p2_found = true;
+    }
   }
   EXPECT_TRUE(p1_found);
   EXPECT_TRUE(p2_found);
@@ -60,26 +64,26 @@ TEST_F(PlayerRegistryTest, AddMultiplePlayers) {
 
 // 测试用例: 更新现有玩家
 TEST_F(PlayerRegistryTest, UpdateExistingPlayer) {
-  registry.updatePlayer(createTestPlayer("player1", 1.0f));
+  registry.updatePlayer(createTestPlayer("player1", 1.0F));
 
   // 确认初始状态
   auto old_player = registry.getPlayer("player1");
   ASSERT_NE(old_player, nullptr);
-  EXPECT_FLOAT_EQ(old_player->position().x(), 1.0f);
+  EXPECT_FLOAT_EQ(old_player->position().x(), 1.0F);
 
   // 更新玩家
-  registry.updatePlayer(createTestPlayer("player1", 99.0f));
+  registry.updatePlayer(createTestPlayer("player1", 99.0F));
 
   EXPECT_EQ(registry.getPlayerCount(), 1);  // 数量不应改变
   auto updated_player = registry.getPlayer("player1");
   ASSERT_NE(updated_player, nullptr);
-  EXPECT_FLOAT_EQ(updated_player->position().x(), 99.0f);  // 检查值是否已更新
+  EXPECT_FLOAT_EQ(updated_player->position().x(), 99.0F);  // 检查值是否已更新
 }
 
 // 测试用例: 移除玩家
 TEST_F(PlayerRegistryTest, RemovePlayer) {
-  registry.updatePlayer(createTestPlayer("player1", 1.0f));
-  registry.updatePlayer(createTestPlayer("player2", 2.0f));
+  registry.updatePlayer(createTestPlayer("player1", 1.0F));
+  registry.updatePlayer(createTestPlayer("player2", 2.0F));
 
   EXPECT_EQ(registry.getPlayerCount(), 2);
 
@@ -92,7 +96,7 @@ TEST_F(PlayerRegistryTest, RemovePlayer) {
 
 // 测试用例: 移除不存在的玩家
 TEST_F(PlayerRegistryTest, RemoveNonExistentPlayer) {
-  registry.updatePlayer(createTestPlayer("player1", 1.0f));
+  registry.updatePlayer(createTestPlayer("player1", 1.0F));
 
   // 移除一个不存在的玩家，不应该发生任何事或崩溃
   ASSERT_NO_THROW(registry.removePlayer("player_ghost"));
@@ -111,6 +115,7 @@ TEST_F(PlayerRegistryTest, ThreadSafety) {
   const int operations_per_thread = 100;
   std::vector<std::thread> threads;
 
+  threads.reserve(num_threads);
   for (int i = 0; i < num_threads; ++i) {
     threads.emplace_back([&, i]() {
       for (int j = 0; j < operations_per_thread; ++j) {
@@ -119,7 +124,7 @@ TEST_F(PlayerRegistryTest, ThreadSafety) {
 
         // 混合执行各种操作
         if (j % 3 == 0) {
-          registry.updatePlayer(createTestPlayer(id, (float)j));
+          registry.updatePlayer(createTestPlayer(id, static_cast<float>(j)));
         } else if (j % 3 == 1) {
           registry.removePlayer(id);
         } else {

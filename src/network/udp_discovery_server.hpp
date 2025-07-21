@@ -8,8 +8,7 @@
 namespace net = boost::asio;
 using udp = net::ip::udp;
 
-namespace picoradar {
-namespace network {
+namespace picoradar::network {
 
 class UdpDiscoveryServer {
  public:
@@ -18,7 +17,7 @@ class UdpDiscoveryServer {
   ~UdpDiscoveryServer();
 
   UdpDiscoveryServer(const UdpDiscoveryServer&) = delete;
-  UdpDiscoveryServer& operator=(const UdpDiscoveryServer&) = delete;
+  auto operator=(const UdpDiscoveryServer&) -> UdpDiscoveryServer& = delete;
 
   void start();
   void stop();
@@ -35,5 +34,4 @@ class UdpDiscoveryServer {
   std::atomic<bool> is_running_{false};
 };
 
-}  // namespace network
-}  // namespace picoradar
+}  // namespace picoradar::network

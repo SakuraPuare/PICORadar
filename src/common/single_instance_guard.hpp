@@ -10,8 +10,7 @@
 #include <unistd.h>
 #endif
 
-namespace picoradar {
-namespace common {
+namespace picoradar::common {
 
 /**
  * @brief 一个用于确保应用程序只有一个实例在运行的类。
@@ -48,7 +47,7 @@ class SingleInstanceGuard {
 
   // 禁止拷贝和赋值
   SingleInstanceGuard(const SingleInstanceGuard&) = delete;
-  SingleInstanceGuard& operator=(const SingleInstanceGuard&) = delete;
+  auto operator=(const SingleInstanceGuard&) -> SingleInstanceGuard& = delete;
 
  private:
   std::string lock_file_path_;
@@ -60,5 +59,4 @@ class SingleInstanceGuard {
 #endif
 };
 
-}  // namespace common
-}  // namespace picoradar
+}  // namespace picoradar::common
