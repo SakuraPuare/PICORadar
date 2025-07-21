@@ -5,6 +5,7 @@
     "gtest",
     "protobuf",
     "boost-beast",
+    "boost-thread",
     "glog"
   ]
 }

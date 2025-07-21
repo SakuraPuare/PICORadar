@@ -32,7 +32,12 @@ jobs:
       - name: Install Ninja
         run: sudo apt-get update && sudo apt-get install -y ninja-build
 
-      # 3. Cache vcpkg dependencies to speed up subsequent runs
+      # 3. Install vcpkg
+      - name: Install vcpkg
+        run: |
+          ./vcpkg/bootstrap-vcpkg.sh
+
+      # 4. Cache vcpkg dependencies to speed up subsequent runs
       - name: Cache vcpkg dependencies
         uses: actions/cache@v4
         with:
@@ -43,22 +48,22 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-vcpkg-
 
-      # 4. Install dependencies using vcpkg
+      # 5. Install dependencies using vcpkg
       - name: Install dependencies
-        run: vcpkg install --triplet x64-linux
+        run: ./vcpkg/vcpkg install --triplet x64-linux
 
-      # 5. Configure CMake using Ninja generator
+      # 6. Configure CMake using Ninja generator
       - name: Configure CMake
         run: >
           cmake -G Ninja -B build -S .
           -DCMAKE_BUILD_TYPE=Debug
           -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
 
-      # 6. Build the project
+      # 7. Build the project
       - name: Build project
         run: cmake --build build --config Debug
 
-      # 7. Run tests using CTest
+      # 8. Run tests using CTest
       - name: Run tests
         working-directory: ./build
         # --output-on-failure will print the test output if it fails
