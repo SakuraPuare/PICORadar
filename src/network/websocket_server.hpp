@@ -1,10 +1,10 @@
 #pragma once
 
+#include <atomic>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
-#include <atomic>
 #include <memory>
 #include <mutex>
 #include <string>

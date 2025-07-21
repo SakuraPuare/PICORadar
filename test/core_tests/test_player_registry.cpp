@@ -1,6 +1,7 @@
+#include <thread>
+
 #include "core/player_registry.hpp"
 #include "gtest/gtest.h"
-#include <thread>
 
 using namespace picoradar::core;
 
@@ -101,39 +102,40 @@ TEST_F(PlayerRegistryTest, RemoveNonExistentPlayer) {
 
 // 测试用例: 获取不存在的玩家
 TEST_F(PlayerRegistryTest, GetNonExistentPlayer) {
-    EXPECT_EQ(registry.getPlayer("player_ghost"), nullptr);
+  EXPECT_EQ(registry.getPlayer("player_ghost"), nullptr);
 }
 
 // 测试用例: 线程安全
 TEST_F(PlayerRegistryTest, ThreadSafety) {
-    const int num_threads = 10;
-    const int operations_per_thread = 100;
-    std::vector<std::thread> threads;
+  const int num_threads = 10;
+  const int operations_per_thread = 100;
+  std::vector<std::thread> threads;
 
-    for (int i = 0; i < num_threads; ++i) {
-        threads.emplace_back([&, i]() {
-            for (int j = 0; j < operations_per_thread; ++j) {
-                std::string id = "player_" + std::to_string((i * operations_per_thread + j) % 20);
-                
-                // 混合执行各种操作
-                if (j % 3 == 0) {
-                    registry.updatePlayer(createTestPlayer(id, (float)j));
-                } else if (j % 3 == 1) {
-                    registry.removePlayer(id);
-                } else {
-                    registry.getAllPlayers();
-                    registry.getPlayer(id);
-                }
-            }
-        });
-    }
+  for (int i = 0; i < num_threads; ++i) {
+    threads.emplace_back([&, i]() {
+      for (int j = 0; j < operations_per_thread; ++j) {
+        std::string id =
+            "player_" + std::to_string((i * operations_per_thread + j) % 20);
 
-    for (auto& t : threads) {
-        t.join();
-    }
+        // 混合执行各种操作
+        if (j % 3 == 0) {
+          registry.updatePlayer(createTestPlayer(id, (float)j));
+        } else if (j % 3 == 1) {
+          registry.removePlayer(id);
+        } else {
+          registry.getAllPlayers();
+          registry.getPlayer(id);
+        }
+      }
+    });
+  }
 
-    // 在所有操作之后，我们无法预测最终状态，
-    // 但我们可以断言程序没有崩溃，并且最终的玩家数量是合理的（小于等于20）。
-    EXPECT_LE(registry.getPlayerCount(), 20);
-    ASSERT_NO_THROW(registry.getAllPlayers()); // 确认在并发操作后可以安全地访问
+  for (auto& t : threads) {
+    t.join();
+  }
+
+  // 在所有操作之后，我们无法预测最终状态，
+  // 但我们可以断言程序没有崩溃，并且最终的玩家数量是合理的（小于等于20）。
+  EXPECT_LE(registry.getPlayerCount(), 20);
+  ASSERT_NO_THROW(registry.getAllPlayers());  // 确认在并发操作后可以安全地访问
 }

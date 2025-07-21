@@ -1,7 +1,7 @@
 #pragma once
 
-#include <string>
 #include <stdexcept>
+#include <string>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -18,7 +18,8 @@ namespace common {
  *
  * 该类使用文件锁来实现单例保证，并且是跨平台的。
  * 它遵循RAII（资源获取即初始化）原则：
- * - 在构造时，它会尝试锁定一个PID文件。如果锁定失败（意味着另一个实例已在运行），
+ * -
+ * 在构造时，它会尝试锁定一个PID文件。如果锁定失败（意味着另一个实例已在运行），
  *   它会抛出一个异常。
  * - 在析构时，它会自动释放锁并删除PID文件。
  *
@@ -35,29 +36,29 @@ namespace common {
  * }
  */
 class SingleInstanceGuard {
-public:
-    /**
-     * @brief 构造函数，尝试获取实例锁。
-     * @param lock_file_name PID文件的名称。它将被创建在临时目录中。
-     * @throws std::runtime_error 如果另一个实例已在运行。
-     */
-    explicit SingleInstanceGuard(const std::string& lock_file_name);
+ public:
+  /**
+   * @brief 构造函数，尝试获取实例锁。
+   * @param lock_file_name PID文件的名称。它将被创建在临时目录中。
+   * @throws std::runtime_error 如果另一个实例已在运行。
+   */
+  explicit SingleInstanceGuard(const std::string& lock_file_name);
 
-    ~SingleInstanceGuard();
+  ~SingleInstanceGuard();
 
-    // 禁止拷贝和赋值
-    SingleInstanceGuard(const SingleInstanceGuard&) = delete;
-    SingleInstanceGuard& operator=(const SingleInstanceGuard&) = delete;
+  // 禁止拷贝和赋值
+  SingleInstanceGuard(const SingleInstanceGuard&) = delete;
+  SingleInstanceGuard& operator=(const SingleInstanceGuard&) = delete;
 
-private:
-    std::string lock_file_path_;
+ private:
+  std::string lock_file_path_;
 
 #ifdef _WIN32
-    HANDLE file_handle_ = INVALID_HANDLE_VALUE;
+  HANDLE file_handle_ = INVALID_HANDLE_VALUE;
 #else
-    int file_descriptor_ = -1;
+  int file_descriptor_ = -1;
 #endif
 };
 
-} // namespace common
-} // namespace picoradar
+}  // namespace common
+}  // namespace picoradar

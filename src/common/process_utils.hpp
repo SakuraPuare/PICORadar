@@ -22,5 +22,5 @@ using ProcessId = pid_t;
  */
 bool is_process_running(ProcessId pid);
 
-} // namespace common
-} // namespace picoradar
+}  // namespace common
+}  // namespace picoradar

@@ -30,8 +30,8 @@ int main(int argc, char* argv[]) {
   // 确保只有一个实例在运行
   std::unique_ptr<picoradar::common::SingleInstanceGuard> guard;
   try {
-    guard =
-        std::make_unique<picoradar::common::SingleInstanceGuard>("PicoRadar.pid");
+    guard = std::make_unique<picoradar::common::SingleInstanceGuard>(
+        "PicoRadar.pid");
   } catch (const std::runtime_error& e) {
     LOG(ERROR) << "Failed to start: " << e.what();
     return 1;

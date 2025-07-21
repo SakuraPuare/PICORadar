@@ -96,7 +96,8 @@ class Session : public std::enable_shared_from_this<Session> {
     ServerToClient response;
     auto* auth_response = response.mutable_auth_response();
 
-    if (auth_request.token() == secret_token_ && !auth_request.player_id().empty()) {
+    if (auth_request.token() == secret_token_ &&
+        !auth_request.player_id().empty()) {
       is_authenticated_ = true;
       player_id_ = auth_request.player_id();
       auth_response->set_success(true);
@@ -111,7 +112,8 @@ class Session : public std::enable_shared_from_this<Session> {
 
   void handle_player_data() {
     ClientToServer message;
-    if (message.ParseFromArray(buffer_.data().data(), buffer_.size()) && message.has_player_data()) {
+    if (message.ParseFromArray(buffer_.data().data(), buffer_.size()) &&
+        message.has_player_data()) {
       auto player_data = message.player_data();
       player_data.set_player_id(player_id_);
       registry_.updatePlayer(player_data);
@@ -121,9 +123,9 @@ class Session : public std::enable_shared_from_this<Session> {
   }
 
   void send(std::shared_ptr<const std::string> const& ss) {
-    net::post(ws_.get_executor(),
-              beast::bind_front_handler(&Session::on_send, shared_from_this(),
-                                        ss));
+    net::post(
+        ws_.get_executor(),
+        beast::bind_front_handler(&Session::on_send, shared_from_this(), ss));
   }
 
  private:
@@ -163,7 +165,8 @@ class Listener : public std::enable_shared_from_this<Listener> {
   tcp::acceptor acceptor_;
 
  public:
-  Listener(net::io_context& ioc, tcp::endpoint endpoint, WebsocketServer& server)
+  Listener(net::io_context& ioc, tcp::endpoint endpoint,
+           WebsocketServer& server)
       : server_(server), ioc_(ioc), acceptor_(ioc) {
     beast::error_code ec;
     acceptor_.open(endpoint.protocol(), ec);
@@ -269,8 +272,9 @@ void WebsocketServer::broadcast_loop() {
     for (const auto& player : players) {
       player_list->add_players()->CopyFrom(player);
     }
-    
-    auto const ss = std::make_shared<const std::string>(message.SerializeAsString());
+
+    auto const ss =
+        std::make_shared<const std::string>(message.SerializeAsString());
 
     std::vector<std::shared_ptr<Session>> recipients;
     {
