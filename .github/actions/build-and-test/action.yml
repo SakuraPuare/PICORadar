@@ -1,5 +1,5 @@
-name: 'Build and Test'
-description: 'Build project and run tests'
+name: 'Build and Test with Caching'
+description: 'Build project and run tests with build caching'
 inputs:
   enable_coverage:
     description: 'Enable coverage reporting'
@@ -12,13 +12,31 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Configure CMake (Linux)
+    # 增量构建缓存
+    - name: Cache build artifacts
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/**/*.o
+          build/**/*.obj
+          build/**/*.a
+          build/**/*.lib
+          build/**/*.so
+          build/**/*.dll
+          build/**/*.dylib
+        key: build-artifacts-${{ inputs.os }}-${{ hashFiles('src/**/*.cpp', 'src/**/*.hpp', 'include/**/*.hpp') }}
+        restore-keys: |
+          build-artifacts-${{ inputs.os }}-
+
+    - name: Configure CMake with caching (Linux)
       if: inputs.os == 'Linux'
       run: |
         cmake -G Ninja -B build -S . \
           -DCMAKE_BUILD_TYPE=Debug \
           ${{ inputs.enable_coverage == 'true' && '-DENABLE_COVERAGE=ON' || '' }} \
-          -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
+          -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
       shell: bash
 
     - name: Configure CMake (Windows)
@@ -28,20 +46,44 @@ runs:
       shell: cmd
 
     - name: Build project
-      run: cmake --build build --config Debug
+      run: cmake --build build --config Debug --parallel
       shell: ${{ inputs.os == 'Linux' && 'bash' || 'cmd' }}
+
+    - name: Show ccache statistics (Linux)
+      if: inputs.os == 'Linux'
+      run: ccache --show-stats
+      shell: bash
+
+    # 缓存测试数据
+    - name: Cache test data
+      uses: actions/cache@v4
+      with:
+        path: |
+          test/data
+          test/fixtures
+        key: test-data-${{ hashFiles('test/data/**/*', 'test/fixtures/**/*') }}
 
     - name: Run tests
       working-directory: ./build
-      run: ctest -C Debug --output-on-failure --verbose
+      run: ctest -C Debug --output-on-failure --parallel 4
       shell: ${{ inputs.os == 'Linux' && 'bash' || 'cmd' }}
 
-    - name: Generate coverage report
+    - name: Generate coverage report with gcovr
       if: inputs.enable_coverage == 'true' && inputs.os == 'Linux'
       working-directory: ./build
       run: |
-        lcov --capture --directory . --output-file coverage.info
-        lcov --remove coverage.info '/usr/*' '*/vcpkg_installed/*' '*/test/*' --output-file coverage.info
-        lcov --list coverage.info
-        genhtml coverage.info --output-directory coverage_report
+        # 使用 gcovr 生成覆盖率报告
+        gcovr . \
+          --root .. \
+          --exclude '../test/.*' \
+          --exclude '../vcpkg_installed/.*' \
+          --exclude '/usr/.*' \
+          --exclude '.*\.pb\.cc' \
+          --exclude '.*\.pb\.h' \
+          --exclude '../build/_deps/.*' \
+          --html-details coverage_report/index.html \
+          --html-title "PICORadar Coverage Report" \
+          --xml coverage.xml \
+          --json coverage.json \
+          --print-summary
       shell: bash

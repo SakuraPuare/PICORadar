@@ -1,5 +1,5 @@
-name: 'Setup Build Environment'
-description: 'Install build dependencies and tools'
+name: 'Setup Build Environment with Caching'
+description: 'Install build dependencies with caching'
 inputs:
   os:
     description: 'Operating system'
@@ -12,14 +12,29 @@ runs:
       if: inputs.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y ninja-build lcov
+        sudo apt-get install -y ninja-build ccache gcovr cmake
+
+        # 配置 ccache
+        ccache --set-config=cache_dir=$HOME/.ccache
+        ccache --set-config=max_size=2G
+        ccache --set-config=compression=true
+        ccache --zero-stats
+
+        echo "/usr/lib/ccache" >> $GITHUB_PATH
       shell: bash
 
     - name: Install dependencies (Windows)
       if: inputs.os == 'Windows'
-      run: choco install ninja
+      run: |
+        # 检查是否已安装以避免重复下载
+        if (!(Get-Command ninja -ErrorAction SilentlyContinue)) {
+          choco install ninja
+        }
       shell: powershell
 
-    - name: Setup MSVC (Windows)
+    - name: Setup MSVC with caching (Windows)
       if: inputs.os == 'Windows'
       uses: ilammy/msvc-dev-cmd@v1
+      with:
+        # 使用特定版本以便缓存
+        vsversion: '2022'

@@ -1,4 +1,4 @@
-name: C++ CI
+name: C++ CI with Advanced Caching
 
 on:
   push:
@@ -18,10 +18,12 @@ jobs:
             triplet: x64-linux
             enable_coverage: true
             os_name: Linux
+            compiler: gcc-11
           - os: windows-latest
             triplet: x64-windows
             enable_coverage: false
             os_name: Windows
+            compiler: msvc-2022
 
     runs-on: ${{ matrix.os }}
 
@@ -30,6 +32,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
+
+      - name: Setup comprehensive caching
+        uses: ./.github/actions/setup-cache
+        with:
+          os: ${{ matrix.os_name }}
+          triplet: ${{ matrix.triplet }}
+          compiler: ${{ matrix.compiler }}
 
       - name: Setup build environment
         uses: ./.github/actions/setup-build-env
