@@ -74,6 +74,24 @@ cmake --build build
 -   [**开发路线图 (ROADMAP.md)**](ROADMAP.md): 查看项目的功能规划和当前进度。
 -   [**开发日志 (blogs/)**](blogs/): 关注我们从零到一的完整开发心路历程。
 
+## 覆盖率统计说明
+
+本项目已统一采用 [gcovr](https://gcovr.com/) 工具进行代码覆盖率统计和报告生成，弃用 lcov。请使用如下命令生成覆盖率报告：
+
+```bash
+./scripts/generate_coverage_report.sh
+```
+
+该脚本会自动运行测试并生成 HTML、XML、JSON 和文本格式的覆盖率报告，报告文件位于 `coverage/` 目录下。
+
+如需手动安装 gcovr：
+
+```bash
+pip install gcovr
+# 或
+sudo apt-get install gcovr
+```
+
 ## 贡献
 
 我们欢迎任何形式的贡献！请查阅[**贡献指南 (CONTRIBUTING.md)**](CONTRIBUTING.md)来开始。

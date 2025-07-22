@@ -104,6 +104,33 @@ sudo pacman -S lcov
 - `*/CMakeFiles/*` - CMake生成的文件
 - `*/proto/*.pb.*` - Protobuf生成的文件
 
+## 覆盖率工具
+
+本项目已统一采用 [gcovr](https://gcovr.com/) 进行代码覆盖率统计和报告生成，弃用 lcov。
+
+### 生成覆盖率报告
+
+请直接运行：
+
+```bash
+./scripts/generate_coverage_report.sh
+```
+
+该脚本会自动运行测试并生成 HTML、XML、JSON 和文本格式的覆盖率报告，报告文件位于 `coverage/` 目录下。
+
+如需手动安装 gcovr：
+
+```bash
+pip install gcovr
+# 或
+sudo apt-get install gcovr
+```
+
+### 常见问题
+
+- 如果覆盖率报告为空，请确保编译时启用了 `--coverage` 选项（CMake 变量 `ENABLE_COVERAGE=ON`）。
+- 仅支持 GCC/Clang 编译器。
+
 ## 故障排除
 
 ### 常见问题

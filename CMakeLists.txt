@@ -11,7 +11,15 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(ENABLE_COVERAGE "Enable code coverage" OFF)
+# ==============================================================================
+# 项目选项
+# ==============================================================================
+option(PICORADAR_BUILD_TESTS "构建测试" ON)
+option(PICORADAR_BUILD_SERVER "构建服务端应用" ON)
+option(PICORADAR_BUILD_CLIENT_LIB "构建客户端库" ON)
+option(PICORADAR_BUILD_MOCK_CLIENT "构建模拟客户端" ON)
+option(ENABLE_COVERAGE "启用代码覆盖率" OFF)
+
 
 if(ENABLE_COVERAGE)
     if(CMAKE_COMPILER_IS_GNUCXX)
@@ -21,6 +29,7 @@ if(ENABLE_COVERAGE)
     else()
         message(WARNING "Code coverage is only supported for GCC/Clang")
     endif()
+    message(STATUS "建议使用 gcovr 生成覆盖率报告，已不再查找 lcov/genhtml。")
 endif()
 
 # 生成 compile_commands.json 文件，供 linter 使用
@@ -36,15 +45,6 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg")
 endif()
 
 # ==============================================================================
-# 项目选项
-# ==============================================================================
-option(PICORADAR_BUILD_TESTS "构建测试" ON)
-option(PICORADAR_BUILD_SERVER "构建服务端应用" ON)
-option(PICORADAR_BUILD_CLIENT_LIB "构建客户端库" ON)
-option(PICORADAR_BUILD_MOCK_CLIENT "构建模拟客户端" ON)
-option(ENABLE_COVERAGE "启用代码覆盖率" OFF)
-
-# ==============================================================================
 # 覆盖率配置
 # ==============================================================================
 if(ENABLE_COVERAGE)
@@ -56,22 +56,15 @@ if(ENABLE_COVERAGE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} --coverage")
     
-    # 查找lcov工具
-    find_program(LCOV_PATH lcov)
-    if(LCOV_PATH)
-        message(STATUS "找到 lcov: ${LCOV_PATH}")
+    # 查找 gcovr 工具
+    find_program(GCOVR_PATH gcovr)
+    if(GCOVR_PATH)
+        message(STATUS "找到 gcovr: ${GCOVR_PATH}")
     else()
-        message(WARNING "未找到 lcov，覆盖率报告生成可能受限")
+        message(WARNING "未找到 gcovr，无法自动生成覆盖率报告")
     endif()
-    
-    # 查找genhtml工具
-    find_program(GENHTML_PATH genhtml)
-    if(GENHTML_PATH)
-        message(STATUS "找到 genhtml: ${GENHTML_PATH}")
-    else()
-        message(WARNING "未找到 genhtml，HTML覆盖率报告生成可能受限")
-    endif()
-    
+
+    message(STATUS "建议使用 gcovr 生成覆盖率报告。")
     message(STATUS "覆盖率功能已启用")
 endif()
 
@@ -150,7 +143,6 @@ message(STATUS "  - 构建模拟客户端: ${PICORADAR_BUILD_MOCK_CLIENT}")
 message(STATUS "  - 构建测试: ${PICORADAR_BUILD_TESTS}")
 message(STATUS "  - 覆盖率功能: ${ENABLE_COVERAGE}")
 if(ENABLE_COVERAGE)
-    message(STATUS "  - lcov: ${LCOV_PATH}")
-    message(STATUS "  - genhtml: ${GENHTML_PATH}")
+    message(STATUS "  - gcovr: ${GCOVR_PATH}")
 endif()
 message(STATUS "========================================")

@@ -25,17 +25,10 @@ if [ ! -d "$BUILD_DIR" ]; then
     exit 1
 fi
 
-# 检查lcov是否安装
-if ! command -v lcov &> /dev/null; then
-    echo -e "${RED}错误: lcov 未安装${NC}"
-    echo -e "${YELLOW}请安装 lcov: sudo apt-get install lcov (Ubuntu/Debian)${NC}"
-    exit 1
-fi
-
-# 检查genhtml是否安装
-if ! command -v genhtml &> /dev/null; then
-    echo -e "${RED}错误: genhtml 未安装${NC}"
-    echo -e "${YELLOW}请安装 lcov: sudo apt-get install lcov (Ubuntu/Debian)${NC}"
+# 检查gcovr是否安装
+if ! command -v gcovr &> /dev/null; then
+    echo -e "${RED}错误: gcovr 未安装${NC}"
+    echo -e "${YELLOW}请安装 gcovr: pip install gcovr 或 sudo apt-get install gcovr${NC}"
     exit 1
 fi
 
@@ -50,32 +43,35 @@ echo -e "${GREEN}运行测试以收集覆盖率数据...${NC}"
 # 运行测试
 ctest --output-on-failure
 
-echo -e "${GREEN}收集覆盖率数据...${NC}"
+echo -e "${GREEN}收集并生成覆盖率报告...${NC}"
 
-# 使用lcov收集覆盖率数据
-lcov --capture --directory . --output-file coverage.info
-
+# 使用 gcovr 生成 HTML、XML、JSON 和文本报告
 # 过滤掉不需要的文件
-lcov --remove coverage.info \
-    '/usr/*' \
-    '*/test/*' \
-    '*/mock_client/*' \
-    '*/vcpkg/*' \
-    '*/build*/*' \
-    '*/CMakeFiles/*' \
-    '*/proto/*.pb.*' \
-    --output-file coverage_filtered.info
 
-echo -e "${GREEN}生成HTML覆盖率报告...${NC}"
+# HTML 报告
+GCOVR_EXCLUDES=(
+    '--exclude' '../test/.*'
+    '--exclude' '../mock_client/.*'
+    '--exclude' '../vcpkg/.*'
+    '--exclude' '../build.*/.*'
+    '--exclude' '../CMakeFiles/.*'
+    '--exclude' '.*proto/.*\\.pb\\..*'
+    '--exclude' '/usr/.*'
+)
 
-# 生成HTML报告
-genhtml coverage_filtered.info --output-directory "$COVERAGE_DIR/html"
-
-# 生成文本报告
-lcov --list coverage_filtered.info > "$COVERAGE_DIR/coverage_summary.txt"
+gcovr . \
+    --root .. \
+    "${GCOVR_EXCLUDES[@]}" \
+    --html-details "$COVERAGE_DIR/html/index.html" \
+    --html-title "PICORadar Coverage Report" \
+    --xml "$COVERAGE_DIR/coverage.xml" \
+    --json "$COVERAGE_DIR/coverage.json" \
+    --print-summary > "$COVERAGE_DIR/coverage_summary.txt"
 
 echo -e "${GREEN}覆盖率报告生成完成!${NC}"
 echo -e "${GREEN}HTML报告位置: $COVERAGE_DIR/html/index.html${NC}"
+echo -e "${GREEN}XML报告位置: $COVERAGE_DIR/coverage.xml${NC}"
+echo -e "${GREEN}JSON报告位置: $COVERAGE_DIR/coverage.json${NC}"
 echo -e "${GREEN}文本报告位置: $COVERAGE_DIR/coverage_summary.txt${NC}"
 
 # 显示覆盖率摘要
