@@ -4,9 +4,11 @@
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <memory>
+#include <queue>
 #include <set>
 #include <string>
 #include <thread>
+#include <utility>
 #include "network/udp_discovery_server.hpp"
 #include "player_data.pb.h"
 
@@ -25,6 +27,8 @@ class Session : public std::enable_shared_from_this<Session> {
     beast::flat_buffer buffer_;
     WebsocketServer& server_;
     std::string player_id_;
+    std::queue<std::string> write_queue_;
+    net::strand<net::any_io_executor> strand_;
 
 public:
     Session(tcp::socket&& socket, WebsocketServer& server);
@@ -46,6 +50,7 @@ public:
     auto getPlayerId() const -> const std::string& { return player_id_; }
     void setPlayerId(const std::string& id) { player_id_ = id; }
 private:
+    void do_write();
     void do_accept();
 };
 
@@ -53,11 +58,12 @@ private:
 class Listener : public std::enable_shared_from_this<Listener> {
     net::io_context& ioc_;
     tcp::acceptor acceptor_;
+    tcp::socket socket_;
     WebsocketServer& server_;
 
 public:
     Listener(net::io_context& ioc, const tcp::endpoint& endpoint, WebsocketServer& server)
-        : ioc_(ioc), acceptor_(ioc), server_(server) {
+        : ioc_(ioc), acceptor_(ioc), socket_(ioc), server_(server) {
         beast::error_code ec;
         acceptor_.open(endpoint.protocol(), ec);
         acceptor_.set_option(net::socket_base::reuse_address(true), ec);
@@ -76,11 +82,11 @@ public:
 private:
     void do_accept() {
         acceptor_.async_accept(
-            net::make_strand(ioc_),
+            socket_,
             beast::bind_front_handler(&Listener::on_accept, shared_from_this()));
     }
 
-    void on_accept(beast::error_code ec, tcp::socket socket);
+    void on_accept(beast::error_code ec);
 };
 
 class WebsocketServer {

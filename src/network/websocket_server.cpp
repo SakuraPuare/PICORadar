@@ -8,14 +8,14 @@ namespace picoradar::network {
 //------------------------------------------------------------------------------
 // Listener implementation
 
-void Listener::on_accept(beast::error_code ec, tcp::socket socket) {
+void Listener::on_accept(beast::error_code ec) {
     if (ec) {
         LOG(ERROR) << "Listener accept error: " << ec.message();
         return; // To avoid infinite loop
     }
 
     // Create the session and run it
-    auto session = std::make_shared<Session>(std::move(socket), server_);
+    auto session = std::make_shared<Session>(std::move(socket_), server_);
     server_.onSessionOpened(session);
     session->run();
     
@@ -27,13 +27,16 @@ void Listener::on_accept(beast::error_code ec, tcp::socket socket) {
 // Session implementation
 
 Session::Session(tcp::socket&& socket, WebsocketServer& server)
-    : ws_(std::move(socket)), server_(server) {}
+    : ws_(std::move(socket)),
+      server_(server),
+      strand_(ws_.get_executor()) {}
 
 void Session::run() {
     // We need to be executing within a strand to perform async operations
     // on the I/O objects in this session.
-    net::dispatch(ws_.get_executor(),
-                    beast::bind_front_handler(&Session::do_accept, shared_from_this()));
+    net::dispatch(
+        strand_,
+        beast::bind_front_handler(&Session::do_accept, shared_from_this()));
 }
 
 void Session::do_accept() {
@@ -90,9 +93,18 @@ void Session::on_read(beast::error_code ec, std::size_t bytes_transferred) {
 }
 
 void Session::send(const std::string& message) {
+    net::post(strand_, [self = shared_from_this(), message] {
+        self->write_queue_.push(message);
+        if (self->write_queue_.size() == 1) {
+            self->do_write();
+        }
+    });
+}
+
+void Session::do_write() {
     ws_.binary(true);
     ws_.async_write(
-        net::buffer(message),
+        net::buffer(write_queue_.front()),
         beast::bind_front_handler(
             &Session::on_write,
             shared_from_this()));
@@ -103,6 +115,13 @@ void Session::on_write(beast::error_code ec, std::size_t bytes_transferred) {
 
     if (ec) {
         LOG(ERROR) << "Session write error: " << ec.message();
+        server_.onSessionClosed(shared_from_this());
+        return;
+    }
+    
+    write_queue_.pop();
+    if (!write_queue_.empty()) {
+        do_write();
     }
 }
 

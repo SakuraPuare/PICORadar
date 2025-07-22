@@ -15,29 +15,22 @@ on:
   workflow_dispatch:
 
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  build_and_coverage:
     runs-on: ubuntu-latest
-
     steps:
-      # 1. Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # We need the vcpkg submodule for dependencies
           submodules: 'recursive'
 
-      # 2. Install Ninja for faster builds
-      - name: Install Ninja
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
-
-      # 3. Install vcpkg
-      - name: Install vcpkg
+      - name: Install dependencies and tools
         run: |
-          ./vcpkg/bootstrap-vcpkg.sh
+          sudo apt-get update
+          sudo apt-get install -y ninja-build lcov
 
-      # 4. Cache vcpkg dependencies to speed up subsequent runs
+      - name: Install vcpkg
+        run: ./vcpkg/bootstrap-vcpkg.sh
+
       - name: Cache vcpkg dependencies
         uses: actions/cache@v4
         with:
@@ -48,23 +41,33 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-vcpkg-
 
-      # 5. Install dependencies using vcpkg
       - name: Install dependencies
         run: ./vcpkg/vcpkg install --triplet x64-linux
 
-      # 6. Configure CMake using Ninja generator
       - name: Configure CMake
         run: >
           cmake -G Ninja -B build -S .
           -DCMAKE_BUILD_TYPE=Debug
+          -DENABLE_COVERAGE=ON
           -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
 
-      # 7. Build the project
       - name: Build project
         run: cmake --build build --config Debug
 
-      # 8. Run tests using CTest
       - name: Run tests
         working-directory: ./build
-        # --output-on-failure will print the test output if it fails
         run: ctest -C Debug --output-on-failure
+
+      - name: Generate coverage report
+        working-directory: ./build
+        run: |
+          lcov --capture --directory . --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' '*/vcpkg_installed/*' '*/test/*' --output-file coverage.info
+          lcov --list coverage.info
+          genhtml coverage.info --output-directory coverage_report
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: build/coverage_report

@@ -1,6 +1,8 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 
 project(PicoRadar VERSION 1.0.0 LANGUAGES CXX)
+
+option(USE_VALGRIND "Enable Valgrind for memory checking" OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -8,6 +10,18 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+option(ENABLE_COVERAGE "Enable code coverage" OFF)
+
+if(ENABLE_COVERAGE)
+    if(CMAKE_COMPILER_IS_GNUCXX)
+        message(STATUS "Coverage enabled for GCC/Clang")
+        add_compile_options(--coverage)
+        add_link_options(--coverage)
+    else()
+        message(WARNING "Code coverage is only supported for GCC/Clang")
+    endif()
+endif()
 
 # 生成 compile_commands.json 文件，供 linter 使用
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

@@ -23,6 +23,7 @@ target_link_libraries(common_tests
     common_lib
     GTest::gtest
     GTest::gmock
+    protobuf::libprotobuf
 )
 
 gtest_discover_tests(common_tests)

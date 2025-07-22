@@ -8,6 +8,7 @@
 #include "core/player_registry.hpp"
 #include "network/websocket_server.hpp"
 #include "common/logging.hpp"
+#include <google/protobuf/stubs/common.h>
 
 // 创建一个全局的原子布尔值，用于优雅地处理Ctrl+C信号
 static volatile std::atomic<bool> g_stop_signal(false);
@@ -81,6 +82,7 @@ auto main(int argc, char* argv[]) -> int {
   server->stop();
 
   LOG(INFO) << "Shutdown complete.";
+  google::protobuf::ShutdownProtobufLibrary();
   google::ShutdownGoogleLogging();
 
   return 0;
