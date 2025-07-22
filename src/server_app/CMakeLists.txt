@@ -4,17 +4,8 @@ add_executable(server_app
     main.cpp
 )
 
-target_include_directories(server_app
-    PRIVATE
-    "${CMAKE_SOURCE_DIR}/src"
-)
-
+# 只需要链接 network_lib，它会传递性地链接所有需要的库和包含目录
 target_link_libraries(server_app
     PRIVATE
-    # 我们自己项目的库
     network_lib
-    common_lib
-    
-    # 第三方库
-    glog::glog
 )

@@ -2,6 +2,7 @@
 
 #include <csignal>
 #include <iostream>
+#include <boost/asio/io_context.hpp>
 
 #include "common/single_instance_guard.hpp"
 #include "core/player_registry.hpp"
@@ -43,11 +44,8 @@ auto main(int argc, char* argv[]) -> int {
   LOG(INFO) << "PICO Radar Server Starting...";
   LOG(INFO) << "============================";
 
-  // 定义预共享令牌
-  // TODO(sakurapuare): 未来从配置文件或环境变量加载
-  const std::string secret_token = "pico-radar-super-secret-token-!@#$";
-  LOG(INFO) << "Using secret token (first 8 chars): "
-            << secret_token.substr(0, 8) << "...";
+  // 创建 Boost.Asio 的核心 I/O 上下文
+  net::io_context ioc;
 
   // 创建核心模块
   auto registry = std::make_shared<picoradar::core::PlayerRegistry>();
@@ -56,7 +54,7 @@ auto main(int argc, char* argv[]) -> int {
   std::shared_ptr<picoradar::network::WebsocketServer> server;
   try {
     server = std::make_shared<picoradar::network::WebsocketServer>(
-        *registry, secret_token);
+        ioc, *registry);
   } catch (const std::exception& e) {
     LOG(FATAL) << "Failed to create server: " << e.what();
     return 1;
@@ -75,9 +73,10 @@ auto main(int argc, char* argv[]) -> int {
   LOG(INFO) << "Server will listen on port " << port;
 
   const int threads = 4;  // 使用4个线程处理IO
-  server->run(address, port, threads);
+  server->start(address, port, threads);
 
   // 等待停止信号
+  LOG(INFO) << "Server started successfully. Press Ctrl+C to exit.";
   while (!g_stop_signal) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }

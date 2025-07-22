@@ -1,42 +1,18 @@
 # test/integration_tests/CMakeLists.txt
 
-# 这个目录包含用于运行集成测试的脚本。
-# 这些测试通常涉及启动服务器和客户端。
-
-add_test(
-    NAME AuthFailTest
-    COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/run_auth_fail_test.sh"
-            "${CMAKE_BINARY_DIR}" # 传递构建目录
+add_executable(integration_tests
+    test_broadcast.cpp
+    test_discovery.cpp
 )
 
-add_test(
-    NAME AuthSuccessTest
-    COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/run_auth_success_test.sh"
-            "${CMAKE_BINARY_DIR}" # 传递构建目录
+target_link_libraries(integration_tests PRIVATE
+    network_lib
+    mock_client_lib
+    GTest::gtest
+    GTest::gmock
+    GTest::gtest_main
+    project_includes
 )
 
-add_test(
-    NAME BroadcastTest
-    COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/run_broadcast_test.sh"
-            "${CMAKE_BINARY_DIR}" # 传递构建目录
-)
-
-add_test(
-    NAME DiscoveryTest
-    COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/run_discovery_test.sh"
-            "${CMAKE_BINARY_DIR}" # 传递构建目录
-)
-
-# 确保发现测试在广播测试成功后运行
-set_tests_properties(
-    DiscoveryTest
-    PROPERTIES
-    DEPENDS BroadcastTest
-)
-
-# 确保广播测试在认证测试成功后运行
-set_tests_properties(
-    BroadcastTest
-    PROPERTIES
-    DEPENDS AuthSuccessTest
-)
+include(GoogleTest)
+gtest_discover_tests(integration_tests)

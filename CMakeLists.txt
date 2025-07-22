@@ -67,7 +67,19 @@ endif()
 find_package(Protobuf CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(glog CONFIG REQUIRED)
-find_package(Boost CONFIG REQUIRED COMPONENTS system thread) # Beast是头文件库，但依赖system
+find_package(Boost CONFIG REQUIRED COMPONENTS system thread beast) # Beast是头文件库，但依赖system
+
+# ==============================================================================
+# Central Include Directories Management
+# ==============================================================================
+# 创建一个接口库来管理整个项目的包含目录。
+# 这样所有目标都可以通过链接到它来获得正确的 #include 路径。
+add_library(project_includes INTERFACE)
+target_include_directories(project_includes INTERFACE
+    "${CMAKE_SOURCE_DIR}/src"
+    "${CMAKE_SOURCE_DIR}/test"
+    # Protobuf 的包含目录由 proto_gen 目标自动传递，无需在此添加
+)
 
 # ==============================================================================
 # Protobuf 代码生成 (Modern CMake)
@@ -96,9 +108,12 @@ target_include_directories(proto_gen PUBLIC
 
 
 # ==============================================================================
-# 添加子目录
+# Add Subdirectories
 # ==============================================================================
-add_subdirectory(src)
+add_subdirectory(src/common)
+add_subdirectory(src/core)
+add_subdirectory(src/network)
+add_subdirectory(src/server_app)
 
 if(PICORADAR_BUILD_TESTS)
     enable_testing()

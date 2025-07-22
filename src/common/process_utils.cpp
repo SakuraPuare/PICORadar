@@ -1,41 +1,183 @@
 #include "process_utils.hpp"
 
+#include <stdexcept>
+#include <vector>
+#include <string>
+#include <glog/logging.h>
+
 #ifdef _WIN32
-#include <windows.h>
+#include <tlhelp32.h>
 #else
-#include <cerrno>
-#include <csignal>
+#include <signal.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <vector>
+#include <cstring>
 #endif
 
 namespace picoradar::common {
 
-#ifdef _WIN32
-// --- Windows 实现 ---
-bool is_process_running(ProcessId pid) {
-  if (pid == 0) {
-    return false;
-  }
-  HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, pid);
-  if (process == NULL) {
-    return false;
-  }
-  CloseHandle(process);
-  return true;
-}
-#else
-// --- POSIX 实现 ---
 auto is_process_running(ProcessId pid) -> bool {
-  if (pid <= 0) {
+#ifdef _WIN32
+    HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, pid);
+    if (process == nullptr) {
+        return false;
+    }
+    DWORD ret = WaitForSingleObject(process, 0);
+    CloseHandle(process);
+    return ret == WAIT_TIMEOUT;
+#else
+    return kill(pid, 0) == 0;
+#endif
+}
+
+#ifdef _WIN32
+Process::Process(const std::string& executable_path, const std::vector<std::string>& args) {
+    std::string command_line = "\"" + executable_path + "\"";
+    for (const auto& arg : args) {
+        command_line += " " + arg;
+    }
+
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    ZeroMemory(&pi, sizeof(pi));
+
+    if (!CreateProcessA(nullptr, &command_line[0], nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+        LOG(ERROR) << "CreateProcess failed (" << GetLastError() << ").";
+        throw std::runtime_error("Failed to create process");
+    }
+
+    process_handle_ = pi.hProcess;
+    pid_ = pi.dwProcessId;
+    CloseHandle(pi.hThread);
+    LOG(INFO) << "Process started. PID: " << *pid_;
+}
+
+Process::~Process() {
+    if (isRunning()) {
+        terminate();
+    }
+}
+
+auto Process::isRunning() const -> bool {
+    if (!pid_) {
+        return false;
+    }
+    return is_process_running(*pid_);
+}
+
+auto Process::terminate() -> bool {
+    if (!isRunning()) {
+        return true;
+    }
+    if (TerminateProcess(process_handle_, 1)) {
+        LOG(INFO) << "Process terminated. PID: " << *pid_;
+        WaitForSingleObject(process_handle_, INFINITE);
+        CloseHandle(process_handle_);
+        pid_.reset();
+        process_handle_ = nullptr;
+        return true;
+    }
+    LOG(ERROR) << "Failed to terminate process. PID: " << *pid_ << ", Error: " << GetLastError();
     return false;
-  }
-  // kill(pid, 0) 是一个标准的POSIX技巧，用于检查进程是否存在而不发送信号。
-  // 如果调用返回0，进程存在。
-  // 如果返回-1且errno为EPERM，表示进程存在但我们没有权限发信号给它（例如，它由另一个用户拥有），这也算作“正在运行”。
-  // 如果返回-1且errno为ESRCH，表示进程不存在。
-  if (kill(pid, 0) == 0) {
-    return true;
-  }
-  return errno == EPERM;
+}
+
+auto Process::waitForExit() -> std::optional<int> {
+    if (!pid_) {
+        return std::nullopt;
+    }
+
+    if (process_handle_ != nullptr) {
+        WaitForSingleObject(process_handle_, INFINITE);
+        DWORD exit_code;
+        if (GetExitCodeProcess(process_handle_, &exit_code)) {
+            CloseHandle(process_handle_);
+            process_handle_ = nullptr;
+            pid_.reset();
+            return static_cast<int>(exit_code);
+        }
+        CloseHandle(process_handle_);
+        process_handle_ = nullptr;
+        pid_.reset();
+    }
+    return std::nullopt;
+}
+
+#else  // POSIX implementation
+Process::Process(const std::string& executable_path, const std::vector<std::string>& args) {
+    pid_ = fork();
+
+    if (pid_ < 0) {
+        LOG(ERROR) << "fork() failed.";
+        throw std::runtime_error("Failed to fork process");
+    }
+
+    if (pid_ == 0) {  // Child process
+        std::vector<char*> c_args;
+        c_args.push_back(const_cast<char*>(executable_path.c_str()));
+        for (const auto& arg : args) {
+            c_args.push_back(const_cast<char*>(arg.c_str()));
+        }
+        c_args.push_back(nullptr);
+
+        execv(executable_path.c_str(), c_args.data());
+        // If execv returns, it's an error
+        PLOG(ERROR) << "execv() failed for path: " << executable_path;
+        _exit(127); // Standard exit code for command not found/failed exec
+    }
+    // Parent process
+    LOG(INFO) << "Process started. PID: " << *pid_;
+}
+
+Process::~Process() {
+    if (isRunning()) {
+        terminate();
+    }
+}
+
+auto Process::isRunning() const -> bool {
+    if (!pid_) {
+        return false;
+    }
+    return is_process_running(*pid_);
+}
+
+auto Process::terminate() -> bool {
+    if (!isRunning()) {
+        return true;
+    }
+
+    if (kill(*pid_, SIGKILL) == 0) {
+        LOG(INFO) << "Process terminated. PID: " << *pid_;
+        int status;
+        waitpid(*pid_, &status, 0); // Clean up zombie process
+        pid_.reset();
+        return true;
+    }
+    
+    PLOG(ERROR) << "Failed to kill process with PID: " << *pid_;
+    return false;
+}
+
+auto Process::waitForExit() -> std::optional<int> {
+    if (!pid_) {
+        return std::nullopt;
+    }
+
+    int status;
+    if (waitpid(*pid_, &status, 0) != -1) {
+        pid_.reset();
+        if (WIFEXITED(status)) {
+            return WEXITSTATUS(status);
+        }
+    } else {
+        PLOG(ERROR) << "waitpid() failed for PID: " << *pid_;
+    }
+
+    return std::nullopt;
 }
 #endif
 

@@ -1,325 +1,170 @@
-#include "websocket_server.hpp"
-
+#include "network/websocket_server.hpp"
 #include <glog/logging.h>
-
-#include <boost/asio/post.hpp>
-#include <boost/asio/signal_set.hpp>
-#include <chrono>
-
-#include "player_data.pb.h"
+#include "common/constants.hpp"
 
 namespace picoradar::network {
 
-void fail(beast::error_code ec, char const* what) {
-  if (ec == net::error::operation_aborted || ec == websocket::error::closed ||
-      ec == net::error::connection_reset) {
-    return;
-  }
-  LOG(ERROR) << what << ": " << ec.message();
+//------------------------------------------------------------------------------
+// Listener implementation
+
+void Listener::on_accept(beast::error_code ec, tcp::socket socket) {
+    if (ec) {
+        LOG(ERROR) << "Listener accept error: " << ec.message();
+        return; // To avoid infinite loop
+    }
+
+    // Create the session and run it
+    auto session = std::make_shared<Session>(std::move(socket), server_);
+    server_.onSessionOpened(session);
+    session->run();
+    
+    // Accept another connection
+    do_accept();
 }
 
-class Session : public std::enable_shared_from_this<Session> {
-  WebsocketServer& server_;
-  websocket::stream<beast::tcp_stream> ws_;
-  beast::flat_buffer buffer_;
-  std::vector<std::shared_ptr<const std::string>> write_queue_;
-  core::PlayerRegistry& registry_;
-  const std::string secret_token_;
-  bool is_authenticated_ = false;
-  std::string player_id_;
+//------------------------------------------------------------------------------
+// Session implementation
 
- public:
-  Session(tcp::socket&& socket, core::PlayerRegistry& registry,
-          std::string secret_token, WebsocketServer& server)
-      : server_(server),
-        ws_(std::move(socket)),
-        registry_(registry),
-        secret_token_(std::move(secret_token)) {}
-
-  ~Session() {
-    server_.unregister_session(shared_from_this());
-    if (!player_id_.empty()) {
-      registry_.removePlayer(player_id_);
-    }
-  }
-
-  void run() {
-    ws_.set_option(
-        websocket::stream_base::timeout::suggested(beast::role_type::server));
-    ws_.set_option(
-        websocket::stream_base::decorator([](websocket::response_type& res) {
-          res.set(http::field::server, std::string(BOOST_BEAST_VERSION_STRING) +
-                                           " picoradar-websocket-server");
-        }));
-    ws_.async_accept(
-        beast::bind_front_handler(&Session::on_accept, shared_from_this()));
-  }
-
-  void on_accept(beast::error_code ec) {
+void Session::on_accept(beast::error_code ec) {
     if (ec) {
-      {
-        fail(ec, "accept");
-      }
-      return;
+        LOG(ERROR) << "Session accept error: " << ec.message();
+        server_.onSessionClosed(shared_from_this());
+        return;
     }
+
+    // Read a message
     do_read();
-  }
+}
 
-  void do_read() {
-    ws_.async_read(buffer_, beast::bind_front_handler(&Session::on_read,
-                                                      shared_from_this()));
-  }
+void Session::do_read() {
+    // Read a message into our buffer
+    ws_.async_read(
+        buffer_,
+        beast::bind_front_handler(&Session::on_read, shared_from_this()));
+}
 
-  void on_read(beast::error_code ec, std::size_t /*unused*/) {
+void Session::on_read(beast::error_code ec, std::size_t bytes_transferred) {
+    boost::ignore_unused(bytes_transferred);
+
+    // This indicates that the session was closed
+    if (ec == websocket::error::closed) {
+        server_.onSessionClosed(shared_from_this());
+        return;
+    }
+
     if (ec) {
-      fail(ec, "read");
-      return;
+        LOG(ERROR) << "Session read error: " << ec.message();
+        server_.onSessionClosed(shared_from_this());
+        return;
     }
-
-    if (!is_authenticated_) {
-      handle_auth();
+    
+    const auto* msg_data = static_cast<const char*>(buffer_.data().data());
+    const std::string message(msg_data, buffer_.size());
+    
+    if (player_id_.empty()) {
+        // First message is the player_id
+        player_id_ = message;
+        LOG(INFO) << "Player " << player_id_ << " connected.";
     } else {
-      handle_player_data();
+        server_.processMessage(player_id_, message);
     }
-  }
 
-  void handle_auth() {
-    ClientToServer message;
-    if (!message.ParseFromArray(buffer_.data().data(), buffer_.size())) {
-      buffer_.consume(buffer_.size());
-      do_read();
-      return;
-    }
+    // Clear the buffer
     buffer_.consume(buffer_.size());
 
-    if (!message.has_auth_request()) {
-      do_read();
-      return;
-    }
-
-    const auto& auth_request = message.auth_request();
-    ServerToClient response;
-    auto* auth_response = response.mutable_auth_response();
-
-    if (auth_request.token() == secret_token_ &&
-        !auth_request.player_id().empty()) {
-      is_authenticated_ = true;
-      player_id_ = auth_request.player_id();
-      auth_response->set_success(true);
-      LOG(INFO) << "Player " << player_id_ << " authenticated successfully.";
-    } else {
-      is_authenticated_ = false;
-      auth_response->set_success(false);
-    }
-    auto ss = std::make_shared<const std::string>(response.SerializeAsString());
-    send(ss);
-  }
-
-  void handle_player_data() {
-    ClientToServer message;
-    if (message.ParseFromArray(buffer_.data().data(), buffer_.size()) &&
-        message.has_player_data()) {
-      auto player_data = message.player_data();
-      player_data.set_player_id(player_id_);
-      registry_.updatePlayer(player_data);
-    }
-    buffer_.consume(buffer_.size());
+    // Do another read
     do_read();
-  }
+}
 
-  void send(std::shared_ptr<const std::string> const& ss) {
-    net::post(
-        ws_.get_executor(),
-        beast::bind_front_handler(&Session::on_send, shared_from_this(), ss));
-  }
-
- private:
-  void on_send(std::shared_ptr<const std::string> const& ss) {
-    write_queue_.push_back(ss);
-    if (write_queue_.size() > 1) {
-      return;
-    }
-    do_write();
-  }
-
-  void do_write() {
-    if (write_queue_.empty()) {
-      return;
-    }
-    ws_.binary(true);
-    ws_.async_write(
-        net::buffer(*write_queue_.front()),
-        beast::bind_front_handler(&Session::on_write, shared_from_this()));
-  }
-
-  void on_write(beast::error_code ec, std::size_t /*unused*/) {
+void Session::on_close(beast::error_code ec) {
     if (ec) {
-      {
-        fail(ec, "write");
-      }
-      return;
+        LOG(ERROR) << "Session close error: " << ec.message();
     }
+}
 
-    write_queue_.erase(write_queue_.begin());
+//------------------------------------------------------------------------------
+// WebsocketServer implementation
 
-    if (!write_queue_.empty()) {
-      do_write();
-    } else if (is_authenticated_) {
-      do_read();
-    }
-  }
-
- public:
-  auto is_authenticated() const -> bool { return is_authenticated_; }
-};
-
-class Listener : public std::enable_shared_from_this<Listener> {
-  WebsocketServer& server_;
-  net::io_context& ioc_;
-  tcp::acceptor acceptor_;
-
- public:
-  Listener(net::io_context& ioc, const tcp::endpoint& endpoint,
-           WebsocketServer& server)
-      : server_(server), ioc_(ioc), acceptor_(ioc) {
-    beast::error_code ec;
-    acceptor_.open(endpoint.protocol(), ec);
-    if (ec) {
-      throw beast::system_error{ec};
-    }
-    acceptor_.set_option(net::socket_base::reuse_address(true), ec);
-    if (ec) {
-      throw beast::system_error{ec};
-    }
-    acceptor_.bind(endpoint, ec);
-    if (ec) {
-      throw beast::system_error{ec};
-    }
-    acceptor_.listen(net::socket_base::max_listen_connections, ec);
-    if (ec) {
-      throw beast::system_error{ec};
-    }
-  }
-
-  void run() { do_accept(); }
-
- private:
-  void do_accept() {
-    acceptor_.async_accept(
-        net::make_strand(ioc_),
-        beast::bind_front_handler(&Listener::on_accept, shared_from_this()));
-  }
-
-  void on_accept(beast::error_code ec, tcp::socket socket) {
-    if (ec) {
-      {
-        fail(ec, "accept");
-      }
-      return;
-    }
-    auto session = std::make_shared<Session>(
-        std::move(socket), server_.registry_, server_.secret_token_, server_);
-    server_.register_session(session);
-    session->run();
-    do_accept();
-  }
-};
-
-WebsocketServer::WebsocketServer(core::PlayerRegistry& registry,
-                                 std::string secret_token)
-    : registry_(registry), secret_token_(std::move(secret_token)) {}
+WebsocketServer::WebsocketServer(net::io_context& ioc, core::PlayerRegistry& registry)
+    : ioc_{ioc}, registry_{registry} {}
 
 WebsocketServer::~WebsocketServer() {
-  if (is_running_.load()) {
-    stop();
-  }
+    if (is_running_) {
+        stop();
+    }
 }
 
-void WebsocketServer::run(const std::string& address_str, uint16_t port,
-                          int threads_count) {
-  is_running_ = true;
-  auto const address = net::ip::make_address(address_str);
-  listener_ =
-      std::make_shared<Listener>(ioc_, tcp::endpoint{address, port}, *this);
-  listener_->run();
+void WebsocketServer::start(const std::string& address, uint16_t port, int thread_count) {
+    if (is_running_) {
+        return;
+    }
 
-  const uint16_t discovery_port = 9001;
-  discovery_server_ =
-      std::make_unique<UdpDiscoveryServer>(ioc_, discovery_port, port);
-  discovery_server_->start();
+    auto const server_address = net::ip::make_address(address);
 
-  LOG(INFO) << "Server started on " << address_str << ":" << port;
-  threads_.reserve(threads_count);
-  for (int i = 0; i < threads_count; ++i) {
-    threads_.emplace_back([this] { ioc_.run(); });
-  }
-  broadcast_thread_ = std::thread(&WebsocketServer::broadcast_loop, this);
+    listener_ = std::make_shared<Listener>(ioc_, tcp::endpoint{server_address, port}, *this);
+    discovery_server_ = std::make_unique<UdpDiscoveryServer>(ioc_, config::kDiscoveryPort, port);
+
+    listener_->run();
+    discovery_server_->start();
+
+    threads_.reserve(thread_count);
+    for (int i = 0; i < thread_count; ++i) {
+        threads_.emplace_back([this] { ioc_.run(); });
+    }
+    is_running_ = true;
+    LOG(INFO) << "WebsocketServer started on " << address << ":" << port;
 }
 
 void WebsocketServer::stop() {
-  is_running_ = false;
-
-  if (discovery_server_) {
-    discovery_server_->stop();
-  }
-
-  ioc_.stop();
-  if (broadcast_thread_.joinable()) {
-    broadcast_thread_.join();
-  }
-  for (auto& thread : threads_) {
-    if (thread.joinable()) {
-      thread.join();
+    if (!is_running_) {
+        return;
     }
-  }
-  LOG(INFO) << "Server stopped.";
-}
-
-void WebsocketServer::register_session(
-    const std::shared_ptr<Session>& session) {
-  std::lock_guard<std::mutex> lock(sessions_mutex_);
-  sessions_.insert(session);
-}
-
-void WebsocketServer::unregister_session(
-    const std::shared_ptr<Session>& session) {
-  std::lock_guard<std::mutex> lock(sessions_mutex_);
-  sessions_.erase(session);
-}
-
-void WebsocketServer::broadcast_loop() {
-  while (is_running_) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-    auto const players = registry_.getAllPlayers();
-    if (players.empty()) {
-      continue;
-    }
-
-    ServerToClient message;
-    auto* player_list = message.mutable_player_list();
-    for (const auto& player : players) {
-      player_list->add_players()->CopyFrom(player);
-    }
-
-    auto const ss =
-        std::make_shared<const std::string>(message.SerializeAsString());
-
-    std::vector<std::shared_ptr<Session>> recipients;
-    {
-      std::lock_guard<std::mutex> lock(sessions_mutex_);
-      recipients.reserve(sessions_.size());
-      for (auto const& session : sessions_) {
-        if (session->is_authenticated()) {
-          recipients.push_back(session);
+    
+    // Use post to avoid deadlocks if stop() is called from within an ioc handler
+    net::post(ioc_, [this]() {
+        if (discovery_server_) {
+            discovery_server_->stop();
         }
-      }
-    }
+        if (listener_) {
+            listener_->stop();
+        }
+        auto sessions_copy = sessions_;
+        for (const auto& session : sessions_copy) {
+            if (session) {
+                session->close();
+            }
+        }
+        sessions_.clear();
+    });
 
-    for (auto const& recipient : recipients) {
-      recipient->send(ss);
+    ioc_.stop();
+
+    for (auto& t : threads_) {
+        if (t.joinable()) {
+            t.join();
+        }
     }
-  }
+    threads_.clear();
+    
+    is_running_ = false;
+    LOG(INFO) << "WebsocketServer stopped.";
 }
 
-}  // namespace picoradar::network
+void WebsocketServer::onSessionOpened(std::shared_ptr<Session> session) {
+    sessions_.insert(session);
+    LOG(INFO) << "Session opened. Total sessions: " << sessions_.size();
+}
+
+void WebsocketServer::onSessionClosed(std::shared_ptr<Session> session) {
+    if (sessions_.erase(session)) {
+        LOG(INFO) << "Session closed. Total sessions: " << sessions_.size();
+    }
+}
+
+void WebsocketServer::processMessage(const std::string& player_id, const std::string& message) {
+    // For now, we just log the message.
+    // Later, this will parse the protobuf message and update the player registry.
+    LOG(INFO) << "Received message from " << player_id << ": " << message;
+}
+
+} // namespace picoradar::network
