@@ -1,0 +1,42 @@
+name: 'Setup vcpkg'
+description: 'Install and configure vcpkg with caching'
+inputs:
+  triplet:
+    description: 'vcpkg triplet'
+    required: true
+  os:
+    description: 'Operating system'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Bootstrap vcpkg (Linux)
+      if: inputs.os == 'Linux'
+      run: ./vcpkg/bootstrap-vcpkg.sh
+      shell: bash
+
+    - name: Bootstrap vcpkg (Windows)
+      if: inputs.os == 'Windows'
+      run: .\vcpkg\bootstrap-vcpkg.bat
+      shell: cmd
+
+    - name: Cache vcpkg dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          vcpkg/archives
+          vcpkg_installed
+        key: ${{ inputs.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
+        restore-keys: |
+          ${{ inputs.os }}-vcpkg-
+
+    - name: Install vcpkg dependencies (Linux)
+      if: inputs.os == 'Linux'
+      run: ./vcpkg/vcpkg install --triplet ${{ inputs.triplet }}
+      shell: bash
+
+    - name: Install vcpkg dependencies (Windows)
+      if: inputs.os == 'Windows'
+      run: .\vcpkg\vcpkg.exe install --triplet ${{ inputs.triplet }}
+      shell: cmd

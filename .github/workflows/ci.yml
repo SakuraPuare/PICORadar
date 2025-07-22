@@ -1,73 +1,63 @@
-# This is a GitHub Actions workflow for the PICO Radar C++ project.
-# It automates the build and test process to ensure code quality.
-
 name: C++ CI
 
-# Controls when the action will run.
 on:
-  # Triggers the workflow on push or pull request events but only for the main branch
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
-  build_and_coverage:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            triplet: x64-linux
+            enable_coverage: true
+            os_name: Linux
+          - os: windows-latest
+            triplet: x64-windows
+            enable_coverage: false
+            os_name: Windows
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 
-      - name: Install dependencies and tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build lcov
-
-      - name: Install vcpkg
-        run: ./vcpkg/bootstrap-vcpkg.sh
-
-      - name: Cache vcpkg dependencies
-        uses: actions/cache@v4
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build-env
         with:
-          path: |
-            vcpkg/archives
-            vcpkg_installed
-          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            ${{ runner.os }}-vcpkg-
+          os: ${{ matrix.os_name }}
 
-      - name: Install dependencies
-        run: ./vcpkg/vcpkg install --triplet x64-linux
+      - name: Setup vcpkg
+        uses: ./.github/actions/setup-vcpkg
+        with:
+          triplet: ${{ matrix.triplet }}
+          os: ${{ matrix.os_name }}
 
-      - name: Configure CMake
-        run: >
-          cmake -G Ninja -B build -S .
-          -DCMAKE_BUILD_TYPE=Debug
-          -DENABLE_COVERAGE=ON
-          -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
-
-      - name: Build project
-        run: cmake --build build --config Debug
-
-      - name: Run tests
-        working-directory: ./build
-        run: ctest -C Debug --output-on-failure
-
-      - name: Generate coverage report
-        working-directory: ./build
-        run: |
-          lcov --capture --directory . --output-file coverage.info
-          lcov --remove coverage.info '/usr/*' '*/vcpkg_installed/*' '*/test/*' --output-file coverage.info
-          lcov --list coverage.info
-          genhtml coverage.info --output-directory coverage_report
+      - name: Build and test
+        uses: ./.github/actions/build-and-test
+        with:
+          enable_coverage: ${{ matrix.enable_coverage }}
+          os: ${{ matrix.os_name }}
 
       - name: Upload coverage report
+        if: matrix.enable_coverage
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: build/coverage_report
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: build/Testing/

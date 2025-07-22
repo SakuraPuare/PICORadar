@@ -1,0 +1,47 @@
+name: 'Build and Test'
+description: 'Build project and run tests'
+inputs:
+  enable_coverage:
+    description: 'Enable coverage reporting'
+    required: false
+    default: 'false'
+  os:
+    description: 'Operating system'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure CMake (Linux)
+      if: inputs.os == 'Linux'
+      run: |
+        cmake -G Ninja -B build -S . \
+          -DCMAKE_BUILD_TYPE=Debug \
+          ${{ inputs.enable_coverage == 'true' && '-DENABLE_COVERAGE=ON' || '' }} \
+          -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
+      shell: bash
+
+    - name: Configure CMake (Windows)
+      if: inputs.os == 'Windows'
+      run: |
+        cmake -G Ninja -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
+      shell: cmd
+
+    - name: Build project
+      run: cmake --build build --config Debug
+      shell: ${{ inputs.os == 'Linux' && 'bash' || 'cmd' }}
+
+    - name: Run tests
+      working-directory: ./build
+      run: ctest -C Debug --output-on-failure --verbose
+      shell: ${{ inputs.os == 'Linux' && 'bash' || 'cmd' }}
+
+    - name: Generate coverage report
+      if: inputs.enable_coverage == 'true' && inputs.os == 'Linux'
+      working-directory: ./build
+      run: |
+        lcov --capture --directory . --output-file coverage.info
+        lcov --remove coverage.info '/usr/*' '*/vcpkg_installed/*' '*/test/*' --output-file coverage.info
+        lcov --list coverage.info
+        genhtml coverage.info --output-directory coverage_report
+      shell: bash

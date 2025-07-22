@@ -1,0 +1,25 @@
+name: 'Setup Build Environment'
+description: 'Install build dependencies and tools'
+inputs:
+  os:
+    description: 'Operating system'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install dependencies (Linux)
+      if: inputs.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build lcov
+      shell: bash
+
+    - name: Install dependencies (Windows)
+      if: inputs.os == 'Windows'
+      run: choco install ninja
+      shell: powershell
+
+    - name: Setup MSVC (Windows)
+      if: inputs.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
