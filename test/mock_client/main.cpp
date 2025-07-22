@@ -1,9 +1,9 @@
 #include <glog/logging.h>
 #include "mock_client/sync_client.hpp"
+#include "common/logging.hpp"
 
 auto main(int argc, char** argv) -> int {
-  google::InitGoogleLogging(argv[0]);
-  FLAGS_logtostderr = true;
+  picoradar::common::setup_logging(argv[0], false);
 
   if (argc < 2) {
     LOG(ERROR) << "Usage: \n"

@@ -1,6 +1,7 @@
 #include "network/websocket_server.hpp"
 #include <glog/logging.h>
 #include "common/constants.hpp"
+#include "player_data.pb.h"
 
 namespace picoradar::network {
 
@@ -25,6 +26,22 @@ void Listener::on_accept(beast::error_code ec, tcp::socket socket) {
 //------------------------------------------------------------------------------
 // Session implementation
 
+Session::Session(tcp::socket&& socket, WebsocketServer& server)
+    : ws_(std::move(socket)), server_(server) {}
+
+void Session::run() {
+    // We need to be executing within a strand to perform async operations
+    // on the I/O objects in this session.
+    net::dispatch(ws_.get_executor(),
+                    beast::bind_front_handler(&Session::do_accept, shared_from_this()));
+}
+
+void Session::do_accept() {
+    ws_.async_accept(
+        beast::bind_front_handler(&Session::on_accept, shared_from_this()));
+}
+
+
 void Session::on_accept(beast::error_code ec) {
     if (ec) {
         LOG(ERROR) << "Session accept error: " << ec.message();
@@ -38,6 +55,7 @@ void Session::on_accept(beast::error_code ec) {
 
 void Session::do_read() {
     // Read a message into our buffer
+    ws_.binary(true);
     ws_.async_read(
         buffer_,
         beast::bind_front_handler(&Session::on_read, shared_from_this()));
@@ -58,16 +76,11 @@ void Session::on_read(beast::error_code ec, std::size_t bytes_transferred) {
         return;
     }
     
+    // It's a binary message
     const auto* msg_data = static_cast<const char*>(buffer_.data().data());
     const std::string message(msg_data, buffer_.size());
-    
-    if (player_id_.empty()) {
-        // First message is the player_id
-        player_id_ = message;
-        LOG(INFO) << "Player " << player_id_ << " connected.";
-    } else {
-        server_.processMessage(player_id_, message);
-    }
+
+    server_.processMessage(shared_from_this(), message);
 
     // Clear the buffer
     buffer_.consume(buffer_.size());
@@ -75,6 +88,24 @@ void Session::on_read(beast::error_code ec, std::size_t bytes_transferred) {
     // Do another read
     do_read();
 }
+
+void Session::send(const std::string& message) {
+    ws_.binary(true);
+    ws_.async_write(
+        net::buffer(message),
+        beast::bind_front_handler(
+            &Session::on_write,
+            shared_from_this()));
+}
+
+void Session::on_write(beast::error_code ec, std::size_t bytes_transferred) {
+    boost::ignore_unused(bytes_transferred);
+
+    if (ec) {
+        LOG(ERROR) << "Session write error: " << ec.message();
+    }
+}
+
 
 void Session::on_close(beast::error_code ec) {
     if (ec) {
@@ -102,7 +133,7 @@ void WebsocketServer::start(const std::string& address, uint16_t port, int threa
     auto const server_address = net::ip::make_address(address);
 
     listener_ = std::make_shared<Listener>(ioc_, tcp::endpoint{server_address, port}, *this);
-    discovery_server_ = std::make_unique<UdpDiscoveryServer>(ioc_, config::kDiscoveryPort, port);
+    discovery_server_ = std::make_unique<UdpDiscoveryServer>(ioc_, config::kDiscoveryPort, port, address);
 
     listener_->run();
     discovery_server_->start();
@@ -156,15 +187,51 @@ void WebsocketServer::onSessionOpened(std::shared_ptr<Session> session) {
 }
 
 void WebsocketServer::onSessionClosed(std::shared_ptr<Session> session) {
+    if (!session->getPlayerId().empty()) {
+        registry_.removePlayer(session->getPlayerId());
+    }
     if (sessions_.erase(session)) {
         LOG(INFO) << "Session closed. Total sessions: " << sessions_.size();
+        broadcastPlayerList();
     }
 }
 
-void WebsocketServer::processMessage(const std::string& player_id, const std::string& message) {
-    // For now, we just log the message.
-    // Later, this will parse the protobuf message and update the player registry.
-    LOG(INFO) << "Received message from " << player_id << ": " << message;
+void WebsocketServer::processMessage(std::shared_ptr<Session> session, const std::string& message) {
+    ClientToServer request;
+    if (!request.ParseFromString(message)) {
+        LOG(WARNING) << "Failed to parse ClientToServer message.";
+        return;
+    }
+
+    if (request.has_player_data()) {
+        const auto& player_data = request.player_data();
+        const std::string& player_id = player_data.player_id();
+
+        if (session->getPlayerId().empty()) {
+             session->setPlayerId(player_id);
+             LOG(INFO) << "Player " << player_id << " connected and registered.";
+        }
+        
+        registry_.updatePlayer(player_id, player_data);
+        broadcastPlayerList();
+    }
+}
+
+void WebsocketServer::broadcastPlayerList() {
+    ServerToClient response;
+    auto* player_list = response.mutable_player_list();
+    
+    for(const auto& player : registry_.getAllPlayers()) {
+        auto* player_data = player_list->add_players();
+        player_data->CopyFrom(player.second);
+    }
+    
+    std::string serialized_response;
+    response.SerializeToString(&serialized_response);
+
+    for (const auto& session : sessions_) {
+        session->send(serialized_response);
+    }
 }
 
 } // namespace picoradar::network

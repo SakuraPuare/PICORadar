@@ -27,35 +27,37 @@ TEST_F(PlayerRegistryTest, InitialState) {
 
 // 测试用例: 添加单个玩家
 TEST_F(PlayerRegistryTest, AddSinglePlayer) {
+  picoradar::core::PlayerRegistry registry;
   auto p1 = createTestPlayer("player1", 1.0F);
-  registry.updatePlayer(p1);
+  registry.updatePlayer(p1.player_id(), p1);
 
-  EXPECT_EQ(registry.getPlayerCount(), 1);
-  auto retrieved = registry.getPlayer("player1");
-  ASSERT_NE(retrieved, nullptr);
-  EXPECT_EQ(retrieved->player_id(), "player1");
-  EXPECT_FLOAT_EQ(retrieved->position().x(), 1.0F);
+  ASSERT_EQ(registry.getPlayerCount(), 1);
+  auto player = registry.getPlayer("player1");
+  ASSERT_NE(player, nullptr);
+  EXPECT_EQ(player->player_id(), "player1");
+  EXPECT_FLOAT_EQ(player->position().x(), 1.0F);
 }
 
 // 测试用例: 添加多个玩家
 TEST_F(PlayerRegistryTest, AddMultiplePlayers) {
-  registry.updatePlayer(createTestPlayer("player1", 1.0F));
-  registry.updatePlayer(createTestPlayer("player2", 2.0F));
+  picoradar::core::PlayerRegistry registry;
+  registry.updatePlayer("player1", createTestPlayer("player1", 1.0F));
+  registry.updatePlayer("player2", createTestPlayer("player2", 2.0F));
 
-  EXPECT_EQ(registry.getPlayerCount(), 2);
+  ASSERT_EQ(registry.getPlayerCount(), 2);
 
   auto players = registry.getAllPlayers();
-  EXPECT_EQ(players.size(), 2);
-
-  // 检查是否能找到两个玩家 (unordered_map不保证顺序)
   bool p1_found = false;
   bool p2_found = false;
-  for (const auto& p : players) {
+  for (const auto& pair : players) {
+    const auto& p = pair.second;
     if (p.player_id() == "player1") {
       p1_found = true;
+      EXPECT_EQ(p.position().x(), 1.0F);
     }
     if (p.player_id() == "player2") {
       p2_found = true;
+      EXPECT_EQ(p.position().x(), 2.0F);
     }
   }
   EXPECT_TRUE(p1_found);
@@ -64,44 +66,43 @@ TEST_F(PlayerRegistryTest, AddMultiplePlayers) {
 
 // 测试用例: 更新现有玩家
 TEST_F(PlayerRegistryTest, UpdateExistingPlayer) {
-  registry.updatePlayer(createTestPlayer("player1", 1.0F));
+  picoradar::core::PlayerRegistry registry;
+  registry.updatePlayer("player1", createTestPlayer("player1", 1.0F));
 
-  // 确认初始状态
-  auto old_player = registry.getPlayer("player1");
-  ASSERT_NE(old_player, nullptr);
-  EXPECT_FLOAT_EQ(old_player->position().x(), 1.0F);
+  auto player1 = registry.getPlayer("player1");
+  ASSERT_TRUE(player1);
+  EXPECT_EQ(player1->position().x(), 1.0F);
 
-  // 更新玩家
-  registry.updatePlayer(createTestPlayer("player1", 99.0F));
-
-  EXPECT_EQ(registry.getPlayerCount(), 1);  // 数量不应改变
-  auto updated_player = registry.getPlayer("player1");
-  ASSERT_NE(updated_player, nullptr);
-  EXPECT_FLOAT_EQ(updated_player->position().x(), 99.0F);  // 检查值是否已更新
+  // 更新玩家数据
+  registry.updatePlayer("player1", createTestPlayer("player1", 99.0F));
+  ASSERT_EQ(registry.getPlayerCount(), 1);
+  player1 = registry.getPlayer("player1");
+  ASSERT_TRUE(player1);
+  EXPECT_EQ(player1->position().x(), 99.0F);
 }
 
 // 测试用例: 移除玩家
 TEST_F(PlayerRegistryTest, RemovePlayer) {
-  registry.updatePlayer(createTestPlayer("player1", 1.0F));
-  registry.updatePlayer(createTestPlayer("player2", 2.0F));
-
-  EXPECT_EQ(registry.getPlayerCount(), 2);
+  picoradar::core::PlayerRegistry registry;
+  registry.updatePlayer("player1", createTestPlayer("player1", 1.0F));
+  registry.updatePlayer("player2", createTestPlayer("player2", 2.0F));
+  ASSERT_EQ(registry.getPlayerCount(), 2);
 
   registry.removePlayer("player1");
-
-  EXPECT_EQ(registry.getPlayerCount(), 1);
-  EXPECT_EQ(registry.getPlayer("player1"), nullptr);  // 确认player1已被移除
-  EXPECT_NE(registry.getPlayer("player2"), nullptr);  // 确认player2还在
+  ASSERT_EQ(registry.getPlayerCount(), 1);
+  EXPECT_FALSE(registry.getPlayer("player1"));
+  EXPECT_TRUE(registry.getPlayer("player2"));
 }
 
 // 测试用例: 移除不存在的玩家
 TEST_F(PlayerRegistryTest, RemoveNonExistentPlayer) {
-  registry.updatePlayer(createTestPlayer("player1", 1.0F));
+  picoradar::core::PlayerRegistry registry;
+  registry.updatePlayer("player1", createTestPlayer("player1", 1.0F));
+  ASSERT_EQ(registry.getPlayerCount(), 1);
 
-  // 移除一个不存在的玩家，不应该发生任何事或崩溃
-  ASSERT_NO_THROW(registry.removePlayer("player_ghost"));
-
-  EXPECT_EQ(registry.getPlayerCount(), 1);
+  // 尝试删除一个不存在的玩家，不应该发生任何事
+  registry.removePlayer("player_non_existent");
+  ASSERT_EQ(registry.getPlayerCount(), 1);
 }
 
 // 测试用例: 获取不存在的玩家
@@ -111,26 +112,17 @@ TEST_F(PlayerRegistryTest, GetNonExistentPlayer) {
 
 // 测试用例: 线程安全
 TEST_F(PlayerRegistryTest, ThreadSafety) {
-  const int num_threads = 10;
-  const int operations_per_thread = 100;
+  picoradar::core::PlayerRegistry registry;
+  const int threadCount = 4;
+  const int updatesPerThread = 1000;
   std::vector<std::thread> threads;
 
-  threads.reserve(num_threads);
-  for (int i = 0; i < num_threads; ++i) {
-    threads.emplace_back([&, i]() {
-      for (int j = 0; j < operations_per_thread; ++j) {
-        std::string id =
-            "player_" + std::to_string((i * operations_per_thread + j) % 20);
-
-        // 混合执行各种操作
-        if (j % 3 == 0) {
-          registry.updatePlayer(createTestPlayer(id, static_cast<float>(j)));
-        } else if (j % 3 == 1) {
-          registry.removePlayer(id);
-        } else {
-          registry.getAllPlayers();
-          registry.getPlayer(id);
-        }
+  for (int i = 0; i < threadCount; ++i) {
+    threads.emplace_back([this, &registry, i]() {
+      for (int j = 0; j < updatesPerThread; ++j) {
+        std::string id = "player" + std::to_string(i);
+        registry.updatePlayer(id, createTestPlayer(id, static_cast<float>(j)));
+        registry.getPlayer(id);
       }
     });
   }

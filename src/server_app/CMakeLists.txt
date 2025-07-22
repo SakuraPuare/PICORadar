@@ -8,4 +8,5 @@ add_executable(server_app
 target_link_libraries(server_app
     PRIVATE
     network_lib
+    common_lib # 显式链接 common_lib
 )

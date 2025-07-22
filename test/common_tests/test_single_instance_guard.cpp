@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "common/process_utils.hpp"
+#include "process_utils.hpp"
 #include <fstream>
 #include <thread>
 #include <chrono>

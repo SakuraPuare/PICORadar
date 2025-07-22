@@ -1,5 +1,5 @@
 #include <glog/logging.h>
-
+#include <filesystem>
 #include <csignal>
 #include <iostream>
 #include <boost/asio/io_context.hpp>
@@ -7,6 +7,7 @@
 #include "common/single_instance_guard.hpp"
 #include "core/player_registry.hpp"
 #include "network/websocket_server.hpp"
+#include "common/logging.hpp"
 
 // 创建一个全局的原子布尔值，用于优雅地处理Ctrl+C信号
 static volatile std::atomic<bool> g_stop_signal(false);
@@ -21,12 +22,7 @@ void signal_handler(int signal) {
 
 auto main(int argc, char* argv[]) -> int {
   // 初始化 glog
-  google::InitGoogleLogging(argv[0]);
-  // 将日志同时输出到标准错误流和文件
-  FLAGS_logtostderr = false;
-  FLAGS_alsologtostderr = true;
-  // 设置日志文件目录
-  FLAGS_log_dir = "./logs";
+  picoradar::common::setup_logging(argv[0]);
 
   // 确保只有一个实例在运行
   std::unique_ptr<picoradar::common::SingleInstanceGuard> guard;

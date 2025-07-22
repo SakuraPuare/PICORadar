@@ -12,20 +12,17 @@ target_link_libraries(common_tests_locker PRIVATE
 
 
 # 2. 编译 GTest 测试运行器
-add_executable(common_tests_runner
+add_executable(common_tests
     test_single_instance_guard.cpp
+    $<TARGET_OBJECTS:gtest_main_obj>
 )
 
-target_link_libraries(common_tests_runner PRIVATE
+# Link against gtest and our common library
+target_link_libraries(common_tests
+    PRIVATE
     common_lib
     GTest::gtest
     GTest::gmock
-    GTest::gtest_main
-    project_includes
 )
 
-# 3. 注册 GTest 测试
-include(GoogleTest)
-gtest_discover_tests(common_tests_runner
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-)
+gtest_discover_tests(common_tests)

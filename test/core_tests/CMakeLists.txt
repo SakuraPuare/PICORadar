@@ -2,19 +2,17 @@
 
 add_executable(core_tests
     test_player_registry.cpp
+    $<TARGET_OBJECTS:gtest_main_obj>
 )
 
 target_link_libraries(core_tests
     PRIVATE
     core_logic
-    project_includes # For common headers and correct include paths
+    common_lib
     GTest::gtest
     GTest::gmock
-    GTest::gtest_main # Provides main function and links gtest
 )
 
-# Discover and add tests to CTest automatically
-include(GoogleTest)
 gtest_discover_tests(core_tests)
 
 

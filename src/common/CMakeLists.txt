@@ -2,26 +2,21 @@
 
 add_library(common_lib STATIC)
 
+# Source files are private to the library
 target_sources(common_lib
     PRIVATE
-        process_utils.cpp
-        single_instance_guard.cpp
+    process_utils.cpp
+    single_instance_guard.cpp
+    logging.cpp
+)
+
+# Headers are made public so consumers can find them
+target_include_directories(common_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+
+target_link_libraries(common_lib
     PUBLIC
-        # 公开头文件，其他模块可以引用
-        process_utils.hpp
-        single_instance_guard.hpp
-        constants.hpp
-)
-
-# 库本身的实现需要包含当前目录的头文件
-target_include_directories(common_lib PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-
-# 链接依赖
-target_link_libraries(common_lib PUBLIC
     glog::glog
-    project_includes # 链接到中央包含目录
 )
 
 if (UNIX AND NOT APPLE)

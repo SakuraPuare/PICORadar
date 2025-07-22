@@ -26,7 +26,7 @@ class PlayerRegistry {
    * 此方法是线程安全的。
    * @param data 玩家数据
    */
-  void updatePlayer(const picoradar::PlayerData& data);
+  void updatePlayer(const std::string& playerId, const picoradar::PlayerData& data);
 
   /**
    * @brief 移除一个玩家。
@@ -38,9 +38,9 @@ class PlayerRegistry {
   /**
    * @brief 获取所有当前玩家数据的快照。
    *
-   * @return 包含所有玩家数据的vector
+   * @return 包含所有玩家数据的map引用
    */
-  auto getAllPlayers() const -> std::vector<picoradar::PlayerData>;
+  auto getAllPlayers() const -> const std::unordered_map<std::string, picoradar::PlayerData>&;
 
   /**
    * @brief 获取特定ID的玩家数据。

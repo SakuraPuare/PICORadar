@@ -3,16 +3,18 @@
 add_executable(integration_tests
     test_broadcast.cpp
     test_discovery.cpp
+    $<TARGET_OBJECTS:gtest_main_obj>
 )
 
-target_link_libraries(integration_tests PRIVATE
+# 链接 GTest 和我们自定义的 main 函数
+target_link_libraries(integration_tests
+    PRIVATE
+    common_lib
     network_lib
+    core_logic
     mock_client_lib
     GTest::gtest
     GTest::gmock
-    GTest::gtest_main
-    project_includes
 )
 
-include(GoogleTest)
 gtest_discover_tests(integration_tests)

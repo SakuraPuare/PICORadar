@@ -40,7 +40,8 @@ auto SyncClient::discover_and_run(const std::string& player_id) -> int {
     socket.open(udp::v4());
     socket.set_option(net::socket_base::broadcast(true));
 
-    udp::endpoint broadcast_endpoint(net::ip::address_v4::broadcast(), config::kDiscoveryPort);
+    udp::endpoint broadcast_endpoint(net::ip::address_v4::broadcast(),
+                                     config::kDiscoveryPort);
     socket.send_to(net::buffer(config::kDiscoveryRequest), broadcast_endpoint);
 
     udp::endpoint server_endpoint;
@@ -57,11 +58,45 @@ auto SyncClient::discover_and_run(const std::string& player_id) -> int {
         response.substr(config::kDiscoveryResponsePrefix.length());
     auto [host, port] = split_address(server_address_str);
 
-    host_ = server_endpoint.address().to_string();
+    if (host.empty() || port.empty()) {
+      LOG(ERROR) << "Failed to parse host and port from discovery response: "
+                 << server_address_str;
+      return 1;
+    }
+
+    host_ = host;
     port_ = port;
 
     LOG(INFO) << "Server discovered at " << host_ << ":" << port_;
-    return run_internal("--interactive", player_id);
+
+    // Connect, register, and disconnect. Do not enter interactive mode.
+    auto const results = resolver_.resolve(host_, port_);
+    net::connect(ws_.next_layer(), results.begin(), results.end());
+
+    websocket::stream_base::timeout opt{std::chrono::seconds(10),
+                                        std::chrono::seconds(10), true};
+    ws_.set_option(opt);
+
+    ws_.handshake(host_ + ":" + port_, "/");
+    LOG(INFO) << "Successfully connected to " << host_ << ":" << port_;
+
+    LOG(INFO) << "Client [" << player_id << "] sending initial player ID.";
+    picoradar::ClientToServer initial_message;
+    initial_message.mutable_player_data()->set_player_id(player_id);
+    std::string serialized_initial_message;
+    initial_message.SerializeToString(&serialized_initial_message);
+    ws_.binary(true);
+    ws_.write(net::buffer(serialized_initial_message));
+    LOG(INFO) << "Player ID " << player_id << " sent to server.";
+
+    beast::error_code ec;
+    ws_.close(websocket::close_code::normal, ec);
+    if(ec) {
+        fail(ec, "close");
+        // Don't return 1 here, as the main goal was connection.
+    }
+    LOG(INFO) << "Client disconnected after discovery test.";
+    return 0;
 
   } catch (std::exception const& e) {
     LOG(ERROR) << "Discovery failed: " << e.what();
@@ -90,10 +125,12 @@ auto SyncClient::run_internal(const std::string& mode,
     LOG(INFO) << "Successfully connected to " << host_ << ":" << port_;
 
     // Since auth is removed, we send player_id directly upon connection.
+    LOG(INFO) << "Client [" << player_id << "] sending initial player ID.";
     picoradar::ClientToServer initial_message;
     initial_message.mutable_player_data()->set_player_id(player_id);
     std::string serialized_initial_message;
     initial_message.SerializeToString(&serialized_initial_message);
+    ws_.binary(true); // Tell the stream to send binary data
     ws_.write(net::buffer(serialized_initial_message));
     LOG(INFO) << "Player ID " << player_id << " sent to server.";
 
@@ -121,40 +158,79 @@ auto SyncClient::seed_data() -> int {
   LOG(INFO) << "Seeding data...";
   picoradar::ClientToServer seed_message;
   auto* player_data = seed_message.mutable_player_data();
-  player_data->set_player_id("seeder_client");
+  // Note: The player_id here is different from the one in the test assertion.
+  // This is okay, the test is checking for ANY other player.
+  player_data->set_player_id("seeder");
   player_data->mutable_position()->set_x(1.23F);
 
   std::string serialized_seed;
   seed_message.SerializeToString(&serialized_seed);
+  LOG(INFO) << "[Seeder] Writing seed data to websocket.";
+  ws_.binary(true); // Tell the stream to send binary data
   ws_.write(net::buffer(serialized_seed));
-  LOG(INFO) << "Seed data sent.";
+  LOG(INFO) << "Seed data sent. Waiting a moment before disconnecting...";
+
+  // Give the listener a chance to connect and receive a broadcast.
+  std::this_thread::sleep_for(std::chrono::seconds(1));
 
   beast::error_code ec;
-  ws_.next_layer().shutdown(tcp::socket::shutdown_both, ec);
-  ws_.next_layer().close(ec);
+  ws_.close(websocket::close_code::normal, ec);
+  if (ec) {
+    fail(ec, "close");
+  }
 
   return 0;
 }
 
 auto SyncClient::test_broadcast() -> int {
-  LOG(INFO) << "Waiting for broadcast...";
-  beast::flat_buffer buffer;
-  ws_.read(buffer);
+  LOG(INFO) << "Waiting for broadcast containing the seeder...";
 
-  picoradar::ServerToClient response;
-  if (!response.ParseFromArray(buffer.data().data(), buffer.size()) ||
-      !response.has_player_list()) {
-    LOG(ERROR) << "Did not receive a valid player list broadcast.";
-    return 1;
+  // Set a timeout for the read operation to avoid blocking forever.
+  websocket::stream_base::timeout opt{
+      std::chrono::seconds(10), // handshake timeout
+      std::chrono::seconds(5), // stream timeout
+      true // ping/pong messages to keep alive
+  };
+  ws_.set_option(opt);
+
+  // Try to read a few times.
+  for (int i = 0; i < 10; ++i) {
+    beast::flat_buffer buffer;
+    beast::error_code ec;
+    LOG(INFO) << "[Listener] Attempting to read from websocket (attempt " << i + 1 << "/10)...";
+    ws_.read(buffer, ec);
+
+    if (ec == websocket::error::closed || ec == beast::error::timeout) {
+      LOG(ERROR) << "Connection closed or timed out while waiting for broadcast. " << ec.message();
+      return 1;
+    }
+    if (ec) {
+      fail(ec, "read");
+      return 1;
+    }
+
+    LOG(INFO) << "[Listener] Successfully read " << buffer.size() << " bytes from websocket.";
+    picoradar::ServerToClient response;
+    if (response.ParseFromArray(buffer.data().data(), buffer.size()) &&
+        response.has_player_list()) {
+      LOG(INFO) << "[Listener] Parsed ServerToClient message with player list.";
+      
+      // The list should contain the listener itself AND the seeder.
+      if (response.player_list().players_size() > 1) {
+        LOG(INFO) << "Received broadcast with " << response.player_list().players_size()
+                  << " players. Test PASSED.";
+        return 0;
+      }
+      LOG(INFO) << "Received broadcast with only " << response.player_list().players_size()
+                << " player(s). Waiting for the seeder...";
+    } else {
+      LOG(WARNING) << "Received a message that was not a valid player list.";
+    }
+    // Wait a bit before retrying
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
 
-  LOG(INFO) << "Received player list with "
-            << response.player_list().players_size() << " players.";
-  if (response.player_list().players_size() > 0) {
-    LOG(INFO) << "Broadcast test PASSED.";
-    return 0;
-  }
-  LOG(ERROR) << "Broadcast test FAILED: player list was empty.";
+  LOG(ERROR) << "Broadcast test FAILED: Did not receive broadcast with seeder after several attempts.";
   return 1;
 }
 

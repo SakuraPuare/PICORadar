@@ -13,7 +13,8 @@ namespace picoradar::network {
 class UdpDiscoveryServer {
  public:
   UdpDiscoveryServer(net::io_context& ioc, uint16_t discovery_port,
-                     uint16_t service_port);
+                     uint16_t service_port,
+                     const std::string& service_host = "0.0.0.0");
   ~UdpDiscoveryServer();
 
   UdpDiscoveryServer(const UdpDiscoveryServer&) = delete;
@@ -28,9 +29,9 @@ class UdpDiscoveryServer {
   net::io_context& ioc_;
   udp::socket socket_;
   udp::endpoint remote_endpoint_;
-  std::array<char, 128> recv_buffer_;
-
+  std::array<char, 128> recv_buffer_{};
   uint16_t service_port_;
+  std::string service_host_;
   std::atomic<bool> is_running_{false};
 };
 

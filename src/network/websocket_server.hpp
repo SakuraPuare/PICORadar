@@ -27,31 +27,26 @@ class Session : public std::enable_shared_from_this<Session> {
     std::string player_id_;
 
 public:
-    Session(tcp::socket&& socket, WebsocketServer& server)
-        : ws_(std::move(socket)), server_(server) {}
+    Session(tcp::socket&& socket, WebsocketServer& server);
 
-    void run() {
-        // We need to be executing within a strand to perform async operations
-        // on the I/O objects in this session.
-        net::dispatch(ws_.get_executor(),
-                      beast::bind_front_handler(&Session::do_accept, shared_from_this()));
-    }
+    // Start the asynchronous operation
+    void run();
 
-    void close() {
-        ws_.async_close(websocket::close_code::normal,
-                        beast::bind_front_handler(&Session::on_close, shared_from_this()));
-    }
-
-private:
-    void do_accept() {
-        ws_.async_accept(
-            beast::bind_front_handler(&Session::on_accept, shared_from_this()));
-    }
-    
-    void on_accept(beast::error_code ec);
     void do_read();
     void on_read(beast::error_code ec, std::size_t bytes_transferred);
+    void on_accept(beast::error_code ec);
     void on_close(beast::error_code ec);
+    void close() { ws_.close(websocket::close_code::normal); }
+
+    // Method to send a message to the client
+    void send(const std::string& message);
+    void on_write(beast::error_code ec, std::size_t bytes_transferred);
+    
+    // Getters and setters for player_id
+    auto getPlayerId() const -> const std::string& { return player_id_; }
+    void setPlayerId(const std::string& id) { player_id_ = id; }
+private:
+    void do_accept();
 };
 
 // Accepts incoming connections and launches the sessions
@@ -103,11 +98,11 @@ public:
     void onSessionOpened(std::shared_ptr<Session> session);
     // Called by Session
     void onSessionClosed(std::shared_ptr<Session> session);
-    void processMessage(const std::string& player_id, const std::string& message);
-    
-    core::PlayerRegistry& getRegistry() { return registry_; }
+    void processMessage(std::shared_ptr<Session> session, const std::string& message);
 
 private:
+    void broadcastPlayerList();
+
     net::io_context& ioc_;
     core::PlayerRegistry& registry_;
     std::shared_ptr<Listener> listener_;

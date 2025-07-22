@@ -9,10 +9,12 @@ const std::string DISCOVERY_RESPONSE_PREFIX = "PICO_RADAR_SERVER:";
 
 UdpDiscoveryServer::UdpDiscoveryServer(net::io_context& ioc,
                                        uint16_t discovery_port,
-                                       uint16_t service_port)
+                                       uint16_t service_port,
+                                       const std::string& service_host)
     : ioc_(ioc),
       socket_(ioc, udp::endpoint(udp::v4(), discovery_port)),
-      service_port_(service_port) {}
+      service_port_(service_port),
+      service_host_(std::move(service_host)) {}
 
 UdpDiscoveryServer::~UdpDiscoveryServer() { stop(); }
 
@@ -39,11 +41,8 @@ void UdpDiscoveryServer::do_receive() {
             LOG(INFO) << "Received discovery request from " << remote_endpoint_;
 
             std::string response_message =
-                DISCOVERY_RESPONSE_PREFIX +
-                // We don't know our own public IP, so we respond on the
-                // interface we received the request on. The client will use the
-                // source of this packet as the server IP.
-                "0.0.0.0:" + std::to_string(service_port_);
+                DISCOVERY_RESPONSE_PREFIX + service_host_ + ":" +
+                std::to_string(service_port_);
 
             socket_.async_send_to(
                 net::buffer(response_message), remote_endpoint_,
