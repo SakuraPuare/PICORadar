@@ -8,6 +8,7 @@ target_sources(common_lib
     process_utils.cpp
     single_instance_guard.cpp
     logging.cpp
+    string_utils.cpp
 )
 
 # Headers are made public so consumers can find them

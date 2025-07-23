@@ -3,6 +3,7 @@
 add_executable(integration_tests
     test_broadcast.cpp
     test_discovery.cpp
+    test_client_library.cpp
     $<TARGET_OBJECTS:gtest_main_obj>
 )
 
@@ -13,6 +14,7 @@ target_link_libraries(integration_tests
     network_lib
     core_logic
     mock_client_lib
+    client_lib
     GTest::gtest
     GTest::gmock
 )

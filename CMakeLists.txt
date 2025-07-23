@@ -120,6 +120,7 @@ target_include_directories(proto_gen PUBLIC
 add_subdirectory(src/common)
 add_subdirectory(src/core)
 add_subdirectory(src/network)
+add_subdirectory(src/client)
 add_subdirectory(src/server_app)
 
 if(PICORADAR_BUILD_TESTS)

@@ -1,4 +1,5 @@
 #include "network/websocket_server.hpp"
+// #include "common/string_utils.hpp" // No longer needed
 #include <glog/logging.h>
 #include "common/constants.hpp"
 #include "player_data.pb.h"
@@ -216,13 +217,63 @@ void WebsocketServer::onSessionClosed(std::shared_ptr<Session> session) {
 }
 
 void WebsocketServer::processMessage(std::shared_ptr<Session> session, const std::string& message) {
+    // LOG(INFO) << "Server received hex: " << common::to_hex(message); // Removed for cleanup
     ClientToServer request;
     if (!request.ParseFromString(message)) {
         LOG(WARNING) << "Failed to parse ClientToServer message.";
         return;
     }
 
-    if (request.has_player_data()) {
+    if (request.has_auth_request()) {
+        const auto& auth_request = request.auth_request();
+        const std::string& player_id = auth_request.player_id();
+        const std::string& token = auth_request.token();
+        
+        // Simple authentication - in real implementation, you might verify the token
+        // against a database or authentication service
+        if (!token.empty() && !player_id.empty()) {
+            // Set the player ID in the session
+            session->setPlayerId(player_id);
+            
+            // Create a minimal player data for registry
+            picoradar::PlayerData player_data;
+            player_data.set_player_id(player_id);
+            player_data.set_timestamp(0);
+            
+            // Add player to registry
+            registry_.updatePlayer(player_id, player_data);
+            
+            LOG(INFO) << "Player " << player_id << " authenticated successfully.";
+            
+            // Send auth response
+            ServerToClient response;
+            auto* auth_response = response.mutable_auth_response();
+            auth_response->set_success(true);
+            auth_response->set_message("Authentication successful");
+            
+            std::string serialized_response;
+            response.SerializeToString(&serialized_response);
+            session->send(serialized_response);
+            
+            // Broadcast updated player list
+            broadcastPlayerList();
+        } else {
+            LOG(WARNING) << "Authentication failed for player: " << player_id;
+            
+            // Send auth response with failure
+            ServerToClient response;
+            auto* auth_response = response.mutable_auth_response();
+            auth_response->set_success(false);
+            auth_response->set_message("Invalid token or player ID");
+            
+            std::string serialized_response;
+            response.SerializeToString(&serialized_response);
+            session->send(serialized_response);
+            
+            // Close the session
+            session->close();
+        }
+    } else if (request.has_player_data()) {
         const auto& player_data = request.player_data();
         const std::string& player_id = player_data.player_id();
 
@@ -237,6 +288,9 @@ void WebsocketServer::processMessage(std::shared_ptr<Session> session, const std
 }
 
 void WebsocketServer::broadcastPlayerList() {
+    // LOG(INFO) << "Broadcasting player list. Session count: " << sessions_.size() 
+    //           << ", Player count in registry: " << registry_.getPlayerCount();
+
     ServerToClient response;
     auto* player_list = response.mutable_player_list();
     
