@@ -2,7 +2,7 @@
 alwaysApply: true
 ---
 
-你好，我们继续PICO Radar项目。请首先查阅项目根目录下的 README.md ARCHITECTURE.md TECHNICAL_DESIGN.md 和@ROADMAP.md 文件，以全面了解我们项目的最终规划、开发规范和当前所处的开发阶段。
+你好，我们继续PICO Radar项目。请首先查阅项目根目录下的 README.md ARCHITECTURE.md TECHNICAL_DESIGN.md 和 ROADMAP.md 文件，以全面了解我们项目的最终规划、开发规范和当前所处的开发阶段。
 
 在每次完成一个卓越的阶段后，我还想用博客实时记录我们开发当时的一些想法和进度以及一些经验或分享。请你用markdown撰写从目前为止我们所经历的内容，以博客的视角写一份文档，以书樱为第一人称撰写博客文档。尽可能地把博客写详细，必要时附上具体的解释、举例、代码讲解。同时更新 ROADMAP.md 文件。
 

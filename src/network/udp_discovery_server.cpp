@@ -13,9 +13,14 @@ UdpDiscoveryServer::UdpDiscoveryServer(net::io_context& ioc,
                                        uint16_t service_port,
                                        std::string service_host)
     : ioc_(ioc),
-      socket_(ioc, udp::endpoint(udp::v4(), discovery_port)),
+      socket_(ioc),
       service_port_(service_port),
-      service_host_(std::move(service_host)) {}
+      service_host_(std::move(service_host)) {
+  udp::endpoint endpoint(udp::v4(), discovery_port);
+  socket_.open(endpoint.protocol());
+  socket_.set_option(net::socket_base::reuse_address(true));
+  socket_.bind(endpoint);
+}
 
 UdpDiscoveryServer::~UdpDiscoveryServer() { stop(); }
 
@@ -30,6 +35,10 @@ void UdpDiscoveryServer::stop() {
   if (is_running_.exchange(false)) {
     net::post(ioc_, [this]() { socket_.cancel(); });
   }
+}
+
+auto UdpDiscoveryServer::get_service_port() const -> uint16_t {
+  return service_port_;
 }
 
 void UdpDiscoveryServer::do_receive() {

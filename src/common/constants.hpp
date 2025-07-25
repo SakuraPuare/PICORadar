@@ -7,7 +7,7 @@ namespace picoradar::config {
 
 // Websocket and network settings
 constexpr uint16_t kDefaultServicePort = 11451;
-const std::string kAuthToken =
+const std::string kDefaultAuthToken =
     "pico_radar_secret_token";  // Warning: For internal/dev use ONLY.
 
 // UDP Discovery

@@ -116,7 +116,6 @@ PicoRadar/
 │   └── common/
 ├── test/
 │   ├── core_tests/
-│   └── mock_client/
 └── vcpkg.json
 ```
 

@@ -25,8 +25,8 @@ void signal_handler(int signal) {
 }
 
 auto main(int argc, char* argv[]) -> int {
-  // 初始化 glog
-  picoradar::common::setup_logging(argv[0]);
+  // 初始化 glog，并为所有日志消息添加 "[SERVER] " 前缀
+  picoradar::common::setup_logging(argv[0], true, "./logs", "[SERVER] ");
 
   // 确保只有一个实例在运行
   std::unique_ptr<picoradar::common::SingleInstanceGuard> guard;

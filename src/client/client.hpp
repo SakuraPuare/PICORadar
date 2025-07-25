@@ -9,7 +9,7 @@
 #include <string>
 #include <thread>
 
-#include "constants.hpp"
+#include "common/constants.hpp"
 #include "player_data.pb.h"
 
 namespace beast = boost::beast;
@@ -111,6 +111,12 @@ class Client {
    * @return -> bool否已连接
    */
   auto is_connected() const -> bool;
+
+  /**
+   * @brief 检查客户端是否已通过身份验证
+   * @return 如果已经过验证则返回 true
+   */
+  auto is_authenticated() const -> bool;
 
  private:
   /**

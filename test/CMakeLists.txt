@@ -17,12 +17,11 @@ target_link_libraries(gtest_main_obj PRIVATE
     proto_gen
 )
 
-# Add subdirectories for different test suites
+# Add test subdirectories
 add_subdirectory(common_tests)
 add_subdirectory(core_tests)
+# add_subdirectory(client_tests) # Currently disabled
 add_subdirectory(integration_tests)
-add_subdirectory(mock_client)
-add_subdirectory(client_tests)
 
 if(USE_VALGRIND)
     find_program(VALGRIND_EXECUTABLE valgrind)

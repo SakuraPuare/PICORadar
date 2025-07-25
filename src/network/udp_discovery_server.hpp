@@ -22,6 +22,7 @@ class UdpDiscoveryServer {
 
   void start();
   void stop();
+  [[nodiscard]] auto get_service_port() const -> uint16_t;
 
  private:
   void do_receive();

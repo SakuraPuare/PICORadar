@@ -81,6 +81,13 @@ auto Client::discover_server(uint16_t discovery_port) -> std::string {
 
     std::string server_address =
         response.substr(config::kDiscoveryResponsePrefix.length());
+
+    // 如果服务器地址是0.0.0.0，则替换为远程端点的地址
+    if (server_address.rfind("0.0.0.0", 0) == 0) {
+      std::string port = server_address.substr(server_address.find(":"));
+      server_address = server_endpoint.address().to_string() + port;
+    }
+
     LOG(INFO) << "Server discovered at " << server_address;
     return server_address;
   } catch (const std::exception& e) {
@@ -184,6 +191,8 @@ auto Client::get_visual_players() const
 }
 
 auto Client::is_connected() const -> bool { return is_connected_; }
+
+auto Client::is_authenticated() const -> bool { return is_authenticated_; }
 
 void Client::send_authentication_request() {
   if (auth_token_.empty() || player_id_.empty()) {
