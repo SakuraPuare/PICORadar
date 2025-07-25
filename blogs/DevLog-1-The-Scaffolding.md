@@ -18,7 +18,7 @@
 我们首先按照`README.md`中的规划，建立了清晰的目录结构 (`src`, `test`, `proto`等)。这种分离不仅是物理上的，更是逻辑上的，它强制我们思考模块间的边界。
 
 紧接着，我们为项目编写了`CMakeLists.txt`文件。我们全面拥抱**现代CMake**的最佳实践：
-- **基于目标（Target-based）的思维**: 我们使用`add_library`和`add_executable`定义了多个目标（如`core_logic`, `network_lib`, `server_app`）。
+- **基于目标（Target-based）的思维**: 我们使用`add_library`和`add_executable`定义了多个目标（如`core_logic`, `network_lib`, `server`）。
 - **属性封装**: 所有的编译选项、包含目录和链接库都通过`target_compile_features`, `target_include_directories`, `target_link_libraries`等命令与特定目标绑定。这取代了旧式的、基于全局变量的配置方式，极大地提高了模块的封装性和可重用性。
 
 ### 依赖管理哲学：为何选择vcpkg？

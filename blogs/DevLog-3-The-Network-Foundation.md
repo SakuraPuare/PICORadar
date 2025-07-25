@@ -23,10 +23,10 @@ Asio是C++异步编程的基石，也是事实上的标准。它完美地实现�
 
 ### 服务器架构剖析：`main.cpp`的职责
 
-我们的`server_app/main.cpp`已经从一个简单的测试脚本，演变为一个结构清晰的服务器入口。其设计遵循了几个关键的软件工程原则：
+我们的`server/main.cpp`已经从一个简单的测试脚本，演变为一个结构清晰的服务器入口。其设计遵循了几个关键的软件工程原则：
 
 ```cpp
-// src/server_app/main.cpp (概念性展示)
+// src/server/main.cpp (概念性展示)
 int main(int argc, char* argv[]) {
     // 1. 初始化与配置 (日志, 命令行参数等)
     google::InitGoogleLogging(argv[0]);

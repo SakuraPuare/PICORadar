@@ -58,9 +58,9 @@ target_link_libraries(proto_gen PUBLIC protobuf::libprotobuf)
 -   `INTERFACE`: 依赖仅传递给消费者，目标自身并不使用。
 
 我们将`core_logic`对`proto_gen`的链接设置为`PUBLIC`。这建立了一条清晰的、自动化的**传递性依赖**链：
-`server_app` 链接到 `network_lib` -> `network_lib` 链接到 `core_logic` -> `core_logic` **公开地**链接到 `proto_gen`。
+`server` 链接到 `network_lib` -> `network_lib` 链接到 `core_logic` -> `core_logic` **公开地**链接到 `proto_gen`。
 
-其结果是，`proto_gen`的头文件路径被自动地、依次地传播给了`core_logic`、`network_lib`和`server_app`。我们不再需要在每个模块的`CMakeLists.txt`中手动添加`include_directories`，整个构建系统的依赖图变得清晰、健壮且可自维护。
+其结果是，`proto_gen`的头文件路径被自动地、依次地传播给了`core_logic`、`network_lib`和`server`。我们不再需要在每个模块的`CMakeLists.txt`中手动添加`include_directories`，整个构建系统的依赖图变得清晰、健壮且可自维护。
 
 ### 结语：构建系统的“投资回报”
 

@@ -1,78 +1,77 @@
-#include "udp_discovery_server.hpp"
-
+#include "network/udp_discovery_server.hpp"
+#include "common/constants.hpp"
 #include <glog/logging.h>
 
-#include <utility>
+namespace picoradar {
+namespace network {
 
-#include "common/constants.hpp"
-
-namespace picoradar::network {
-
-UdpDiscoveryServer::UdpDiscoveryServer(net::io_context& ioc,
-                                       uint16_t discovery_port,
-                                       uint16_t service_port,
-                                       std::string service_host)
+UdpDiscoveryServer::UdpDiscoveryServer(net::io_context& ioc, uint16_t discovery_port, uint16_t service_port, const std::string& host_ip)
     : ioc_(ioc),
       socket_(ioc),
-      service_port_(service_port),
-      service_host_(std::move(service_host)) {
-  udp::endpoint endpoint(udp::v4(), discovery_port);
-  socket_.open(endpoint.protocol());
-  socket_.set_option(net::socket_base::reuse_address(true));
-  socket_.bind(endpoint);
+      service_port_(service_port) {
+    server_address_response_ = config::kDiscoveryResponsePrefix + host_ip + ":" + std::to_string(service_port_);
+    
+    udp::endpoint listen_endpoint(udp::v4(), discovery_port);
+    socket_.open(listen_endpoint.protocol());
+    socket_.set_option(net::socket_base::reuse_address(true));
+    socket_.set_option(net::socket_base::broadcast(true));
+    socket_.bind(listen_endpoint);
 }
 
-UdpDiscoveryServer::~UdpDiscoveryServer() { stop(); }
+UdpDiscoveryServer::~UdpDiscoveryServer() {
+    stop();
+}
 
 void UdpDiscoveryServer::start() {
-  LOG(INFO) << "UDP Discovery Server started on port "
-            << socket_.local_endpoint().port();
-  is_running_ = true;
-  do_receive();
+    LOG(INFO) << "Starting UDP discovery server on port " << socket_.local_endpoint().port();
+    do_receive();
 }
 
 void UdpDiscoveryServer::stop() {
-  if (is_running_.exchange(false)) {
-    net::post(ioc_, [this]() { socket_.cancel(); });
-  }
-}
-
-auto UdpDiscoveryServer::get_service_port() const -> uint16_t {
-  return service_port_;
+    stop_flag_ = true;
+    net::post(ioc_, [this]() {
+        if(socket_.is_open()){
+            socket_.close();
+        }
+    });
 }
 
 void UdpDiscoveryServer::do_receive() {
-  socket_.async_receive_from(
-      net::buffer(recv_buffer_), remote_endpoint_,
-      [this](const boost::system::error_code& ec, std::size_t bytes_recvd) {
-        if (!ec && bytes_recvd > 0) {
-          std::string received_data(recv_buffer_.data(), bytes_recvd);
-          LOG(INFO) << "UDP Discovery received: [" << received_data << "] from "
-                    << remote_endpoint_;
-          if (received_data == config::kDiscoveryRequest) {
-            LOG(INFO) << "Received discovery request from " << remote_endpoint_;
+    if (stop_flag_) return;
 
-            std::string response_message = config::kDiscoveryResponsePrefix +
-                                           service_host_ + ":" +
-                                           std::to_string(service_port_);
-
-            socket_.async_send_to(
-                net::buffer(response_message), remote_endpoint_,
-                [this](const boost::system::error_code& /*ec*/,
-                       std::size_t /*bytes_sent*/) {
-                  // Continue listening after sending
-                  if (is_running_) {
-                    do_receive();
-                  }
-                });
-            return;  // Don't call do_receive here, it's called after send
-          }
-        }
-
-        if (is_running_) {
-          do_receive();
-        }
-      });
+    socket_.async_receive_from(
+        net::buffer(recv_buffer_), remote_endpoint_,
+        [this](const boost::system::error_code& ec, std::size_t bytes_transferred) {
+            handle_receive(ec, bytes_transferred);
+        });
 }
 
-}  // namespace picoradar::network
+void UdpDiscoveryServer::handle_receive(const boost::system::error_code& error, std::size_t bytes_transferred) {
+    if (!error) {
+        std::string received_message(recv_buffer_.data(), bytes_transferred);
+        DLOG(INFO) << "Discovery server received: '" << received_message << "' from " << remote_endpoint_.address().to_string() << ":" << remote_endpoint_.port();
+
+        if (received_message == config::kDiscoveryRequest) {
+            LOG(INFO) << "Received valid discovery request from " << remote_endpoint_.address().to_string() << ":" << remote_endpoint_.port() << ". Responding with " << server_address_response_;
+            do_send(server_address_response_, remote_endpoint_);
+        } else {
+             LOG(WARNING) << "Received invalid discovery request: " << received_message;
+        }
+        
+        do_receive();
+    } else if (error != net::error::operation_aborted) {
+        LOG(ERROR) << "Discovery server receive error: " << error.message();
+    }
+}
+
+void UdpDiscoveryServer::do_send(const std::string& message, udp::endpoint target_endpoint) {
+    socket_.async_send_to(net::buffer(message), target_endpoint,
+        [this](const boost::system::error_code& ec, std::size_t /*bytes_transferred*/) {
+            if (ec) {
+                LOG(ERROR) << "Discovery server send error: " << ec.message();
+            }
+        });
+}
+
+} // namespace network
+} // namespace picoradar

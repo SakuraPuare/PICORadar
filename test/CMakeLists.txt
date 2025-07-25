@@ -20,8 +20,6 @@ target_link_libraries(gtest_main_obj PRIVATE
 # Add test subdirectories
 add_subdirectory(common_tests)
 add_subdirectory(core_tests)
-# add_subdirectory(client_tests) # Currently disabled
-add_subdirectory(integration_tests)
 
 if(USE_VALGRIND)
     find_program(VALGRIND_EXECUTABLE valgrind)
@@ -34,11 +32,6 @@ if(USE_VALGRIND)
         add_test(NAME core_tests_memcheck COMMAND ${VALGRIND_EXECUTABLE} --leak-check=full --show-leak-kinds=all --track-origins=yes -s $<TARGET_FILE:core_tests>)
         set_tests_properties(core_tests_memcheck PROPERTIES WILL_FAIL true)
 
-        add_test(NAME integration_tests_memcheck COMMAND ${VALGRIND_EXECUTABLE} --leak-check=full --show-leak-kinds=all --track-origins=yes -s $<TARGET_FILE:integration_tests>)
-        set_tests_properties(integration_tests_memcheck PROPERTIES WILL_FAIL true)
-        
-        add_test(NAME client_tests_memcheck COMMAND ${VALGRIND_EXECUTABLE} --leak-check=full --show-leak-kinds=all --track-origins=yes -s $<TARGET_FILE:client_tests>)
-        set_tests_properties(client_tests_memcheck PROPERTIES WILL_FAIL true)
     else()
         message(WARNING "Valgrind not found. Memory checks will be skipped.")
     endif()

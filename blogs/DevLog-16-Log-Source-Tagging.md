@@ -60,7 +60,7 @@ void setup_logging(std::string_view app_name, bool log_to_file = true,
 
 ### 3. 应用到主程序
 
-- 服务端（`src/server_app/main.cpp`）：
+- 服务端（`src/server/main.cpp`）：
   ```cpp
   picoradar::common::setup_logging(argv[0], true, "./logs", "[SERVER] ");
   ```

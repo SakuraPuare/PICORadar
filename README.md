@@ -63,10 +63,10 @@ cmake --build build
 
 ```bash
 # 运行服务器，使用默认端口9002
-./build/src/server_app/server_app
+./build/src/server/server
 
 # 或指定一个端口
-./build/src/server_app/server_app 9999
+./build/src/server/server 9999
 ```
 
 ## 文档

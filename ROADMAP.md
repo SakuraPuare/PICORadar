@@ -27,7 +27,7 @@
 *   [x] 设置依赖管理器 (vcpkg) 并获取 `protobuf`, `gtest`, `boost-beast`, `glog` 库。
 *   [x] 实现 `proto/player_data.proto` 文件。
 *   [x] 编写脚本将 `.proto` 文件编译为C++代码，并集成到构建流程中。
-*   [x] 创建 `server_app` 可执行程序的初始框架。
+*   [x] 创建 `server` 可执行程序的初始框架。
 
 ---
 
@@ -45,12 +45,12 @@
 
 ---
 
-### 阶段 3：客户端库与测试重构 (已完成)
+### 阶段 3：客户端库与测试重构 (已废弃)
 
 *   [x] ~~开发 `mock_client` 测试程序，并用其驱动服务端功能的完善。~~ (已废弃)
-*   [x] 创建 `client_lib` 静态库的初始框架。
-*   [x] 在 `client_lib` 中实现WebSocket连接、鉴权、UDP发现等核心功能。
-*   [x] **客户端库重构**: 将客户端库重构为完全异步的模式，以解决阻塞和竞态条件问题。
+*   [x] ~~创建 `client_lib` 静态库的初始框架。~~ (已废弃)
+*   [x] ~~在 `client_lib` 中实现WebSocket连接、鉴权、UDP发现等核心功能。~~ (已废弃)
+*   [x] ~~**客户端库重构**: 将客户端库重构为完全异步的模式，以解决阻塞和竞态条件问题。~~ (已废弃)
 *   [x] **测试与构建系统重构**:
     *   [x] 将所有基于Shell脚本的测试 (`.sh`) 迁移到由GoogleTest驱动的C++集成测试。
     *   [x] 实现了一个用于管理子进程的`Process`辅助类。
@@ -58,20 +58,47 @@
     *   [x] **移除 `mock_client`**: 所有集成测试 (`test_broadcast`, `test_discovery`) 直接依赖 `client_lib`，统一了测试客户端，消除了代码冗余。
     *   [x] **CMake 重构**: 统一了所有测试目标的GTest依赖和链接配置，创建了共享的`gtest_main_obj`对象库，简化了测试的创建和维护。
     *   [x] 实现服务端与客户端日志前缀区分，提升测试可观测性。
-*   [x] 在 `client_lib` 中实现视觉平滑算法（插值）。
+*   [x] ~~在 `client_lib` 中实现视觉平滑算法（插值）。~~ (已废弃)
 
 ---
 
-### **阶段 4: 健壮性与性能 (进行中)**
+### **> 阶段 4: 客户端浴火重生 (进行中)**
 
-*   **>** [ ] 修复并增强压力测试 (`test_stress`)，确保其能稳定地在重构后的架构上运行。
+*   **背景**: 鉴于 `client_lib` 在集成测试中反复出现难以诊断的并发问题，我们决定暂停渐进式修复，采取“推倒重来”的策略，以从根本上保证其健壮性、可测试性和可维护性。
+*   [ ] **第一步：清理旧代码**: 
+    *   [ ] 彻底删除 `src/client/` 目录下的所有旧客户端实现。
+    *   [ ] 彻底删除 `test/client_tests/` 和 `test/integration_tests` 中与旧客户端相关的测试代码。
+*   [ ] **第二步：重新设计 `Client` API**:
+    *   [ ] 废除基于回调的异步模型 (`on_connected`, `on_authenticated`, `on_error` 等)。
+    *   [ ] `connect` 方法将返回 `std::future<void>`，该 `future` 在连接和认证成功后完成，或在失败时携带异常。
+    *   [ ] 数据接收将通过一个线程安全的回调函数 `set_data_update_callback` 来设置。
+    *   [ ] 目标是提供一个极其简洁、易于使用的同步风格接口，将所有异步复杂性完全封装在库内部。
+*   [ ] **第三步：实现新的 `client_lib`**:
+    *   [ ] 实现核心的连接、认证和断开逻辑。
+    *   [ ] 实现线程安全的数据更新回调机制。
+    *   [ ] 内部实现健壮的错误处理和状态管理。
+*   [ ] **第四步：编写全新的、专注的测试**:
+    *   [ ] 创建一个新的 `test/client_lifecycle_tests` 测试集。
+    *   [ ] 编写第一个测试：`ConnectAuthDisconnect`，验证客户端可以成功连接、认证并干净地断开。
+    *   [ ] 编写第二个测试：`AuthenticationFailure`，验证客户端在认证失败时能返回正确的异常。
+    *   [ ] 编写第三个测试：`DataReception`，验证客户端能正确接收和处理来自服务器的数据广播。
+*   [ ] **第五步：迁移并增强集成测试**:
+    *   [ ] 重写 `BroadcastIntegrationTest`，使用新的、更简单的 `client_lib` API。
+    *   [ ] 重写并修复 `StressIntegrationTest`，确保其能稳定地在重构后的架构上运行。
+*   [ ] **第六步：撰写开发日志**: 撰写一篇新的 `DevLog`，记录这次重构的背景、决策过程和最终成果。
+
+---
+
+### 阶段 5: 健壮性与性能
+
 *   [ ] `Client` 类中增加断线重连机制。
 *   [ ] `Client` 类中增加对服务器主动断开的优雅处理。
 *   [ ] 执行并撰写正式的性能基准测试，创建 `PERFORMANCE.md`。
 
+
 ---
 
-### 阶段 5：Unreal Engine 集成
+### 阶段 6：Unreal Engine 集成
 
 *   [ ] 基于C++客户端库，开发Unreal Engine插件。
 *   [ ] 插件需要提供蓝图接口，方便在游戏引擎中调用。
@@ -79,7 +106,7 @@
 
 ---
 
-### 阶段 6：文档与发布
+### 阶段 7：文档与发布
 
 *   [ ] 完善所有公开API的文档。
 *   [ ] 撰写详细的 `DESIGN.md` 和 `USER_GUIDE.md`。
@@ -95,4 +122,4 @@
 
 *   ...
 *   [x] DevLog-17: The-Pressure-Test.md
-*   [ ] **DevLog-18: 大重构：告别模拟客户端 (The Great Refactoring: Farewell, Mock Client)**
+*   [ ] **DevLog-18: 客户端浴火重生 (The Phoenix Project: Rebuilding the Client)**

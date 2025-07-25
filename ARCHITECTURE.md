@@ -112,7 +112,7 @@ PicoRadar/
 ├── src/
 │   ├── core/
 │   ├── network/
-│   ├── server_app/
+│   ├── server/
 │   └── common/
 ├── test/
 │   ├── core_tests/

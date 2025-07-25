@@ -16,7 +16,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # ==============================================================================
 option(PICORADAR_BUILD_TESTS "构建测试" ON)
 option(PICORADAR_BUILD_SERVER "构建服务端应用" ON)
-option(PICORADAR_BUILD_CLIENT_LIB "构建客户端库" ON)
+option(PICORADAR_BUILD_CLIENT_LIB "构建客户端库 (已废弃)" OFF)
 option(PICORADAR_ENABLE_COVERAGE "启用代码覆盖率" OFF)
 option(PICORADAR_USE_GLOG "使用glog进行日志记录" ON)
 
@@ -120,8 +120,7 @@ target_include_directories(proto_gen PUBLIC
 add_subdirectory(src/common)
 add_subdirectory(src/core)
 add_subdirectory(src/network)
-add_subdirectory(src/client)
-add_subdirectory(src/server_app)
+add_subdirectory(src/server)
 
 if(PICORADAR_BUILD_TESTS)
     enable_testing()

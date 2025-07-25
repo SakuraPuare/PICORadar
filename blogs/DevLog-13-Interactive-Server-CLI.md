@@ -36,12 +36,12 @@ int main() {
 
 ## 动手：改造主循环
 
-基于这个思路，我们对`src/server_app/main.cpp`进行了改造。
+基于这个思路，我们对`src/server/main.cpp`进行了改造。
 
 首先，我们引入了`<thread>`和`<string>`头文件，并创建了一个新的线程`server_thread`，它的任务就是运行`ioc.run()`。
 
 ```cpp
-// src/server_app/main.cpp
+// src/server/main.cpp
 
 // ...
 
@@ -60,7 +60,7 @@ std::thread server_thread([&ioc] {
 接下来，我们重写了主线程的循环。它不再是盲目地`sleep`，而是变成了一个标准的输入处理循环，使用`std::getline(std::cin, line)`来读取用户输入的每一行指令。
 
 ```cpp
-// src/server_app/main.cpp
+// src/server/main.cpp
 
 // ...
 
@@ -83,7 +83,7 @@ while (!g_stop_signal && std::getline(std::cin, line)) {
 最后，在程序退出前，我们必须确保后台的服务器线程也已经结束。我们调用`server->stop()`来停止I/O服务（这将导致`ioc.run()`返回），然后使用`server_thread.join()`来等待该线程执行完毕。
 
 ```cpp
-// src/server_app/main.cpp
+// src/server/main.cpp
 
 // ...
 
