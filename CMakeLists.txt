@@ -94,7 +94,10 @@ target_include_directories(project_includes INTERFACE
 # 使用现代 CMake 函数 protobuf_generate
 # 1. 创建一个库目标，并将 .proto 文件作为其“源”文件
 add_library(proto_gen STATIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/proto/player_data.proto"
+    "${CMAKE_CURRENT_SOURCE_DIR}/proto/common.proto"
+    "${CMAKE_CURRENT_SOURCE_DIR}/proto/player.proto"
+    "${CMAKE_CURRENT_SOURCE_DIR}/proto/client.proto"
+    "${CMAKE_CURRENT_SOURCE_DIR}/proto/server.proto"
 )
 
 # 2. 调用 protobuf_generate 将生成的 .pb.cc 和 .pb.h 添加到 proto_gen 目标

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package picoradar;
+
+import "common.proto";
+
+message PlayerData {
+  string player_id = 1;    // 玩家唯一ID
+  string scene_id = 2;     // 场景ID
+  Vector3 position = 3;    // 世界坐标
+  Quaternion rotation = 4; // 头部朝向
+  int64 timestamp = 5;     // 时间戳 (毫秒)
+} 

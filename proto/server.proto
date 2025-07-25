@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package picoradar;
+
+import "player.proto";
+
+// --- 鉴权消息 ---
+message AuthResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// --- 玩家列表消息 ---
+message PlayerList {
+  repeated PlayerData players = 1; // 完整的玩家列表
+}
+
+// --- 服务端 -> 客户端 ---
+message ServerToClient {
+  oneof message_type {
+    AuthResponse auth_response = 1;
+    PlayerList player_list = 2; // 完整的玩家列表
+  }
+} 
