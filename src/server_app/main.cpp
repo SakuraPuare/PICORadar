@@ -3,6 +3,7 @@
 #include <csignal>
 #include <iostream>
 #include <boost/asio/io_context.hpp>
+#include <thread>
 
 #include "common/single_instance_guard.hpp"
 #include "core/player_registry.hpp"
@@ -72,14 +73,31 @@ auto main(int argc, char* argv[]) -> int {
   const int threads = 4;  // 使用4个线程处理IO
   server->start(address, port, threads);
 
-  // 等待停止信号
-  LOG(INFO) << "Server started successfully. Press Ctrl+C to exit.";
-  while (!g_stop_signal) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  // 在一个后台线程中运行io_context
+  std::thread server_thread([&ioc] {
+    try {
+      ioc.run();
+    } catch (const std::exception& e) {
+        LOG(ERROR) << "Exception in server I/O context: " << e.what();
+    }
+  });
+
+  // 主循环处理CLI输入
+  LOG(INFO) << "Server started successfully. Type 'status' for player count, or 'quit' to exit.";
+  std::string line;
+  while (!g_stop_signal && std::getline(std::cin, line)) {
+      if (line == "status") {
+          LOG(INFO) << "Current online players: " << registry->getPlayerCount();
+      } else if (line == "quit" || line == "exit") {
+          g_stop_signal = true;
+      }
   }
 
   // 停止服务器
   server->stop();
+  if(server_thread.joinable()) {
+      server_thread.join();
+  }
 
   LOG(INFO) << "Shutdown complete.";
   google::protobuf::ShutdownProtobufLibrary();
