@@ -2,15 +2,16 @@
 
 #include <glog/logging.h>
 
-namespace picoradar::network {
+#include <utility>
 
-const std::string DISCOVERY_REQUEST = "PICO_RADAR_DISCOVERY_REQUEST";
-const std::string DISCOVERY_RESPONSE_PREFIX = "PICO_RADAR_SERVER:";
+#include "common/constants.hpp"
+
+namespace picoradar::network {
 
 UdpDiscoveryServer::UdpDiscoveryServer(net::io_context& ioc,
                                        uint16_t discovery_port,
                                        uint16_t service_port,
-                                       const std::string& service_host)
+                                       std::string service_host)
     : ioc_(ioc),
       socket_(ioc, udp::endpoint(udp::v4(), discovery_port)),
       service_port_(service_port),
@@ -37,12 +38,14 @@ void UdpDiscoveryServer::do_receive() {
       [this](const boost::system::error_code& ec, std::size_t bytes_recvd) {
         if (!ec && bytes_recvd > 0) {
           std::string received_data(recv_buffer_.data(), bytes_recvd);
-          if (received_data == DISCOVERY_REQUEST) {
+          LOG(INFO) << "UDP Discovery received: [" << received_data << "] from "
+                    << remote_endpoint_;
+          if (received_data == config::kDiscoveryRequest) {
             LOG(INFO) << "Received discovery request from " << remote_endpoint_;
 
-            std::string response_message =
-                DISCOVERY_RESPONSE_PREFIX + service_host_ + ":" +
-                std::to_string(service_port_);
+            std::string response_message = config::kDiscoveryResponsePrefix +
+                                           service_host_ + ":" +
+                                           std::to_string(service_port_);
 
             socket_.async_send_to(
                 net::buffer(response_message), remote_endpoint_,

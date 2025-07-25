@@ -33,6 +33,7 @@ repos:
         types_or: [c++, c]
         args:
         - --fix
+        # - --fix-errors
         # Tell clang-tidy where to find the compilation database.
         # Our build process creates it in the 'build' directory.
         - -p=build

@@ -53,13 +53,13 @@ TEST(PlayerRegistryTest, UpdateExistingPlayer) {
     PlayerRegistry registry;
     PlayerData initial_data;
     initial_data.set_player_id("player1");
-    initial_data.mutable_position()->set_x(1.0f);
+    initial_data.mutable_position()->set_x(1.0F);
     registry.updatePlayer(initial_data);
 
     // Arrange: 准备用于更新的数据
     PlayerData updated_data;
     updated_data.set_player_id("player1");
-    updated_data.mutable_position()->set_x(2.0f); // 新的位置
+    updated_data.mutable_position()->set_x(2.0F); // 新的位置
 
     // Act: 调用更新方法
     registry.updatePlayer(updated_data);
@@ -67,7 +67,7 @@ TEST(PlayerRegistryTest, UpdateExistingPlayer) {
     // Assert: 验证玩家总数未变，且数据已被更新
     auto players = registry.getAllPlayers();
     ASSERT_EQ(players.size(), 1);
-    ASSERT_EQ(players[0].position().x(), 2.0f);
+    ASSERT_EQ(players[0].position().x(), 2.0F);
 }
 ```
 这个测试不仅是一个验证，它更是一份**可执行的规格说明 (Executable Specification)**，形式化地定义了`updatePlayer`方法在“更新”场景下的行为契约。

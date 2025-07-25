@@ -46,16 +46,16 @@ int main() {
                     
                     // 设置位置（这里应该是从VR设备获取的实际位置）
                     auto* position = player_data.mutable_position();
-                    position->set_x(1.0f);
-                    position->set_y(0.0f);
-                    position->set_z(0.0f);
+                    position->set_x(1.0F);
+                    position->set_y(0.0F);
+                    position->set_z(0.0F);
                     
                     // 设置旋转（这里应该是从VR设备获取的实际旋转）
                     auto* rotation = player_data.mutable_rotation();
-                    rotation->set_x(0.0f);
-                    rotation->set_y(0.0f);
-                    rotation->set_z(0.0f);
-                    rotation->set_w(1.0f);
+                    rotation->set_x(0.0F);
+                    rotation->set_y(0.0F);
+                    rotation->set_z(0.0F);
+                    rotation->set_w(1.0F);
                     
                     // 设置时间戳
                     player_data.set_timestamp(std::chrono::duration_cast<std::chrono::milliseconds>(

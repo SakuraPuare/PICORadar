@@ -21,4 +21,4 @@ namespace picoradar::common {
 void setup_logging(std::string_view app_name, bool log_to_file = true,
                    const std::string& log_dir = "./logs");
 
-} // namespace picoradar::common 
+}  // namespace picoradar::common

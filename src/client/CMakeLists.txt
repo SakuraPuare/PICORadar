@@ -9,8 +9,11 @@ target_sources(client_lib
         client.hpp
 )
 
-target_include_directories(client_lib PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+target_include_directories(client_lib 
+    PUBLIC
+        "${CMAKE_SOURCE_DIR}/src/common"
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
 target_link_libraries(client_lib PUBLIC

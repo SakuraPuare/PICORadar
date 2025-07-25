@@ -9,6 +9,6 @@ namespace picoradar::common {
  * @param input 输入字符串
  * @return 十六进制表示的字符串
  */
-std::string to_hex(const std::string& input);
+auto to_hex(const std::string& input) -> std::string;
 
-} // namespace picoradar::common 
+}  // namespace picoradar::common

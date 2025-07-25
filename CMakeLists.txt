@@ -100,8 +100,8 @@ add_library(proto_gen STATIC
 # 2. 调用 protobuf_generate 将生成的 .pb.cc 和 .pb.h 添加到 proto_gen 目标
 protobuf_generate(
     TARGET proto_gen
-    # 指定 .proto 文件的根目录，以便 import 正常工作
     IMPORT_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/proto"
+    NO_SHADOW
 )
 
 # 3. 将 protobuf 运行时库链接到我们的生成库

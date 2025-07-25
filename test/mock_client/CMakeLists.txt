@@ -1,31 +1,39 @@
 # test/mock_client/CMakeLists.txt
 
 # 1. 创建可被其他目标（如测试）重用的静态库
-add_library(mock_client_lib STATIC)
+add_library(
+    mock_client_lib
+    sync_client.cpp
+    sync_client.hpp
+)
 
-target_sources(mock_client_lib
-    PRIVATE
-        sync_client.cpp
+target_include_directories(
+    mock_client_lib 
     PUBLIC
-        sync_client.hpp
+        "${CMAKE_CURRENT_SOURCE_DIR}" # For sync_client.hpp
+        ${CMAKE_SOURCE_DIR}/src # For common headers
+        ${CMAKE_BINARY_DIR} # For protobuf generated headers
 )
 
-target_include_directories(mock_client_lib PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+target_link_libraries(
+    mock_client_lib
+    PRIVATE
+        Boost::asio
+        Boost::beast
+        glog::glog
+        common_lib
+        proto_gen
 )
 
-# 链接 network_lib 会传递所有需要的依赖
-target_link_libraries(mock_client_lib PUBLIC
-    network_lib
-    project_includes # 链接到中央包含目录
-)
-
-# 2. 创建一个轻量的可执行文件作为入口点
-add_executable(mock_client
+# Main executable for the mock client
+add_executable(
+    mock_client_app
     main.cpp
 )
 
-target_link_libraries(mock_client
+target_link_libraries(
+    mock_client_app
     PRIVATE
-    mock_client_lib
+        mock_client_lib
+        glog::glog
 )

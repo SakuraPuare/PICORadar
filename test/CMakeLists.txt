@@ -4,15 +4,25 @@ include(GoogleTest)
 
 # Add our custom main entry point for all tests as an OBJECT library
 add_library(gtest_main_obj OBJECT main.cpp)
-target_include_directories(gtest_main_obj PUBLIC ${CMAKE_SOURCE_DIR})
-target_link_libraries(gtest_main_obj PRIVATE common_lib GTest::gtest GTest::gmock protobuf::libprotobuf)
+
+target_include_directories(gtest_main_obj PUBLIC
+    "${CMAKE_SOURCE_DIR}/src"
+    "${CMAKE_BINARY_DIR}"
+)
+
+target_link_libraries(gtest_main_obj PRIVATE
+    common_lib
+    GTest::gtest
+    GTest::gmock
+    proto_gen
+)
 
 # Add subdirectories for different test suites
 add_subdirectory(common_tests)
 add_subdirectory(core_tests)
 add_subdirectory(integration_tests)
 add_subdirectory(mock_client)
-add_subdirectory(client_tests)  # 添加客户端测试
+add_subdirectory(client_tests)
 
 if(USE_VALGRIND)
     find_program(VALGRIND_EXECUTABLE valgrind)
@@ -34,9 +44,3 @@ if(USE_VALGRIND)
         message(WARNING "Valgrind not found. Memory checks will be skipped.")
     endif()
 endif()
-
-# Add individual test runners to CTest
-# gtest_discover_tests(common_tests_runner)
-# gtest_discover_tests(core_tests_runner)
-# gtest_discover_tests(integration_tests)
-# gtest_discover_tests(client_tests)

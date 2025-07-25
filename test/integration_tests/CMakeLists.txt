@@ -7,6 +7,15 @@ add_executable(integration_tests
     $<TARGET_OBJECTS:gtest_main_obj>
 )
 
+target_include_directories(integration_tests
+    PRIVATE
+    "${CMAKE_SOURCE_DIR}/src/common"
+    "${CMAKE_BINARY_DIR}"
+    "${CMAKE_SOURCE_DIR}/src"
+    "${CMAKE_SOURCE_DIR}/test"
+    "${CMAKE_SOURCE_DIR}/test/mock_client"
+)
+
 # 链接 GTest 和我们自定义的 main 函数
 target_link_libraries(integration_tests
     PRIVATE

@@ -1,15 +1,17 @@
 #include <glog/logging.h>
-#include <filesystem>
-#include <csignal>
-#include <iostream>
+#include <google/protobuf/stubs/common.h>
+
 #include <boost/asio/io_context.hpp>
+#include <csignal>
+#include <filesystem>
+#include <iostream>
 #include <thread>
 
+#include "common/constants.hpp"
+#include "common/logging.hpp"
 #include "common/single_instance_guard.hpp"
 #include "core/player_registry.hpp"
 #include "network/websocket_server.hpp"
-#include "common/logging.hpp"
-#include <google/protobuf/stubs/common.h>
 
 // 创建一个全局的原子布尔值，用于优雅地处理Ctrl+C信号
 static volatile std::atomic<bool> g_stop_signal(false);
@@ -51,8 +53,8 @@ auto main(int argc, char* argv[]) -> int {
   // 创建并运行网络服务器
   std::shared_ptr<picoradar::network::WebsocketServer> server;
   try {
-    server = std::make_shared<picoradar::network::WebsocketServer>(
-        ioc, *registry);
+    server =
+        std::make_shared<picoradar::network::WebsocketServer>(ioc, *registry);
   } catch (const std::exception& e) {
     LOG(FATAL) << "Failed to create server: " << e.what();
     return 1;
@@ -60,12 +62,13 @@ auto main(int argc, char* argv[]) -> int {
 
   // 监听所有网络接口
   const std::string address = "0.0.0.0";
-  uint16_t port = 9002;  // 默认端口
+  uint16_t port = picoradar::config::kDefaultServicePort;  // 默认端口
   if (argc > 1) {
     try {
       port = std::stoi(argv[1]);
     } catch (const std::exception& e) {
-      LOG(ERROR) << "Invalid port number provided. Using default 9002.";
+      LOG(ERROR) << "Invalid port number provided. Using default "
+                 << picoradar::config::kDefaultServicePort;
     }
   }
   LOG(INFO) << "Server will listen on port " << port;
@@ -78,25 +81,26 @@ auto main(int argc, char* argv[]) -> int {
     try {
       ioc.run();
     } catch (const std::exception& e) {
-        LOG(ERROR) << "Exception in server I/O context: " << e.what();
+      LOG(ERROR) << "Exception in server I/O context: " << e.what();
     }
   });
 
   // 主循环处理CLI输入
-  LOG(INFO) << "Server started successfully. Type 'status' for player count, or 'quit' to exit.";
+  LOG(INFO) << "Server started successfully. Type 'status' for player count, "
+               "or 'quit' to exit.";
   std::string line;
   while (!g_stop_signal && std::getline(std::cin, line)) {
-      if (line == "status") {
-          LOG(INFO) << "Current online players: " << registry->getPlayerCount();
-      } else if (line == "quit" || line == "exit") {
-          g_stop_signal = true;
-      }
+    if (line == "status") {
+      LOG(INFO) << "Current online players: " << registry->getPlayerCount();
+    } else if (line == "quit" || line == "exit") {
+      g_stop_signal = true;
+    }
   }
 
   // 停止服务器
   server->stop();
-  if(server_thread.joinable()) {
-      server_thread.join();
+  if (server_thread.joinable()) {
+    server_thread.join();
   }
 
   LOG(INFO) << "Shutdown complete.";
