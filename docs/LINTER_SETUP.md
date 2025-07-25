@@ -72,7 +72,7 @@ A: `compile_commands.json` 是linter（如clangd）用来理解项目结构、�
 
 ### Q: 为什么protobuf文件很重要？
 
-A: 项目中的 `player_registry.hpp` 包含了 `#include "player_data.pb.h"`，如果protobuf文件没有生成，linter会报错找不到这个头文件。
+A: 项目中的 `player_registry.hpp` 包含了 `#include "player.pb.h"`，如果protobuf文件没有生成，linter会报错找不到这个头文件。
 
 ### Q: 每次修改CMakeLists.txt后都需要重新生成吗？
 

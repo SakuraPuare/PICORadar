@@ -11,7 +11,7 @@
 
 #include "core/player_registry.hpp"
 #include "network/udp_discovery_server.hpp"
-#include "player_data.pb.h"
+#include "player.pb.h"
 
 namespace beast = boost::beast;
 namespace net = boost::asio;

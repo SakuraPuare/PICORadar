@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package picoradar;
 
-import "player_data.proto";
+import "player.proto";
 
 // --- 鉴权消息 ---
 message AuthRequest {
