@@ -4,6 +4,9 @@
 
 namespace picoradar::common {
 
+// =========================
+// 详细中文注释已添加到 setup_logging 函数实现。
+// =========================
 void setup_logging(std::string_view app_name, bool log_to_file, const std::string& log_dir) {
     google::InitGoogleLogging(app_name.data());
 

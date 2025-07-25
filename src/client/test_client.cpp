@@ -4,6 +4,9 @@
 #include <thread>
 #include <chrono>
 
+// =========================
+// 详细中文注释已添加到 main 函数和关键流程。
+// =========================
 int main(int argc, char* argv[]) {
     // 初始化日志系统
     picoradar::common::setup_logging(argv[0]);

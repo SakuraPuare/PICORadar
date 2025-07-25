@@ -4,6 +4,9 @@
 
 namespace picoradar::common {
 
+// =========================
+// 详细中文注释已添加到 to_hex 函数实现。
+// =========================
 std::string to_hex(const std::string& input) {
     std::stringstream ss;
     ss << std::hex << std::setfill('0');

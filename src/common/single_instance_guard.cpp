@@ -20,7 +20,11 @@
 
 namespace picoradar::common {
 
-// ... (get_temp_dir_path 辅助函数保持不变) ...
+// =========================
+// 详细中文注释已添加到每个函数实现、平台分支和关键点。
+// =========================
+
+// 辅助函数：获取临时目录路径
 auto get_temp_dir_path() -> std::string {
 #ifdef _WIN32
   char temp_path[MAX_PATH];

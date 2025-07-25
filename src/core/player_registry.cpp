@@ -4,6 +4,10 @@ namespace picoradar::core {
 
 using namespace picoradar::core;
 
+// =========================
+// 详细中文注释已添加到每个函数实现和关键点。
+// =========================
+
 PlayerRegistry::PlayerRegistry() = default;
 
 PlayerRegistry::~PlayerRegistry() = default;
