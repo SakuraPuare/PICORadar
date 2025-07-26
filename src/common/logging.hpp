@@ -31,7 +31,7 @@ public:
     
     // 获取单例
     static Logger& GetInstance();
-    
+
     // 设置日志级别
     void SetLogLevel(LogLevel level);
     

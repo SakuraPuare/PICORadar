@@ -74,9 +74,9 @@ public:
 
     // 禁止拷贝和移动
     Client(const Client&) = delete;
-    Client& operator=(const Client&) = delete;
+    auto operator=(const Client&) -> Client& = delete;
     Client(Client&&) = delete;
-    Client& operator=(Client&&) = delete;
+    auto operator=(Client&&) -> Client& = delete;
 
     /**
      * @brief 设置玩家列表更新回调
@@ -109,9 +109,9 @@ public:
      * 
      * @note 在成功的 connect() 后，必须先调用 disconnect() 才能再次 connect()
      */
-    std::future<void> connect(const std::string& server_address,
+    auto connect(const std::string& server_address,
                              const std::string& player_id,
-                             const std::string& token);
+                             const std::string& token) -> std::future<void>;
 
     /**
      * @brief 断开与服务器的连接
@@ -148,7 +148,7 @@ public:
      * 
      * @thread_safety 线程安全
      */
-    bool isConnected() const;
+    [[nodiscard]] auto isConnected() const -> bool;
 
 private:
     class Impl;

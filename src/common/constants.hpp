@@ -27,4 +27,4 @@ constexpr int kDefaultReadTimeoutSeconds = 1;
 constexpr size_t kDefaultMaxMessageSize = 1024 * 1024;  // 1MB
 constexpr size_t kDefaultMaxConnections = 1000;
 
-} // namespace picoradar::config  // namespace picoradar::config
+}  // namespace picoradar::config

@@ -1,14 +1,15 @@
 #include "process_utils.hpp"
 
-#include "logging.hpp"
-
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "logging.hpp"
+
 #ifdef _WIN32
 #include <tlhelp32.h>
 #else
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -28,6 +29,9 @@ auto is_process_running(ProcessId pid) -> bool {
   CloseHandle(process);
   return ret == WAIT_TIMEOUT;
 #else
+  if (pid == 0) {
+    return false;
+  }
   return kill(pid, 0) == 0;
 #endif
 }
@@ -85,7 +89,7 @@ auto Process::terminate() -> bool {
     return true;
   }
   LOG_ERROR << "Failed to terminate process. PID: " << *pid_
-             << ", Error: " << GetLastError();
+            << ", Error: " << GetLastError();
   return false;
 }
 
@@ -113,14 +117,25 @@ auto Process::waitForExit() -> std::optional<int> {
 #else  // POSIX implementation
 Process::Process(const std::string& executable_path,
                  const std::vector<std::string>& args) {
+  int pipefd[2];
+  if (pipe(pipefd) == -1) {
+    LOG_ERROR << "pipe() failed.";
+    throw std::runtime_error("Failed to create pipe for process creation");
+  }
+
   pid_ = fork();
 
   if (pid_ < 0) {
     LOG_ERROR << "fork() failed.";
+    close(pipefd[0]);
+    close(pipefd[1]);
     throw std::runtime_error("Failed to fork process");
   }
 
-  if (pid_ == 0) {  // Child process
+  if (pid_ == 0) {                          // Child process
+    close(pipefd[0]);                       // Close read end in child
+    fcntl(pipefd[1], F_SETFD, FD_CLOEXEC);  // Close pipe on exec
+
     std::vector<char*> c_args;
     c_args.push_back(const_cast<char*>(executable_path.c_str()));
     for (const auto& arg : args) {
@@ -130,10 +145,25 @@ Process::Process(const std::string& executable_path,
 
     execv(executable_path.c_str(), c_args.data());
     // If execv returns, it's an error
-    LOG_ERROR << "execv() failed for path: " << executable_path;
+    int error_code = errno;
+    (void)write(pipefd[1], &error_code, sizeof(error_code));
+    close(pipefd[1]);
     _exit(127);  // Standard exit code for command not found/failed exec
   }
   // Parent process
+  close(pipefd[1]);  // Close write end in parent
+
+  int error_code = 0;
+  ssize_t bytes_read = read(pipefd[0], &error_code, sizeof(error_code));
+  close(pipefd[0]);
+
+  if (bytes_read > 0) {
+    // Child failed to exec
+    pid_.reset();  // The process did not start successfully
+    throw std::runtime_error("Failed to execute: " +
+                             std::string(strerror(error_code)));
+  }
+
   LOG_INFO << "Process started. PID: " << *pid_;
 }
 
@@ -187,4 +217,3 @@ auto Process::waitForExit() -> std::optional<int> {
 #endif
 
 }  // namespace picoradar::common
-
