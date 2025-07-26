@@ -1,6 +1,6 @@
 #include "process_utils.hpp"
 
-#include <glog/logging.h>
+#include "logging.hpp"
 
 #include <stdexcept>
 #include <string>
@@ -49,19 +49,19 @@ Process::Process(const std::string& executable_path,
 
   if (!CreateProcessA(nullptr, &command_line[0], nullptr, nullptr, FALSE, 0,
                       nullptr, nullptr, &si, &pi)) {
-    LOG(ERROR) << "CreateProcess failed (" << GetLastError() << ").";
+    LOG_ERROR << "CreateProcess failed (" << GetLastError() << ").";
     throw std::runtime_error("Failed to create process");
   }
 
   process_handle_ = pi.hProcess;
   pid_ = pi.dwProcessId;
   CloseHandle(pi.hThread);
-  LOG(INFO) << "Process started. PID: " << *pid_;
+  LOG_INFO << "Process started. PID: " << *pid_;
 }
 
 Process::~Process() {
   if (isRunning()) {
-    terminate();
+    (void)terminate();
   }
 }
 
@@ -77,14 +77,14 @@ auto Process::terminate() -> bool {
     return true;
   }
   if (TerminateProcess(process_handle_, 1)) {
-    LOG(INFO) << "Process terminated. PID: " << *pid_;
+    LOG_INFO << "Process terminated. PID: " << *pid_;
     WaitForSingleObject(process_handle_, INFINITE);
     CloseHandle(process_handle_);
     pid_.reset();
     process_handle_ = nullptr;
     return true;
   }
-  LOG(ERROR) << "Failed to terminate process. PID: " << *pid_
+  LOG_ERROR << "Failed to terminate process. PID: " << *pid_
              << ", Error: " << GetLastError();
   return false;
 }
@@ -116,7 +116,7 @@ Process::Process(const std::string& executable_path,
   pid_ = fork();
 
   if (pid_ < 0) {
-    LOG(ERROR) << "fork() failed.";
+    LOG_ERROR << "fork() failed.";
     throw std::runtime_error("Failed to fork process");
   }
 
@@ -130,16 +130,16 @@ Process::Process(const std::string& executable_path,
 
     execv(executable_path.c_str(), c_args.data());
     // If execv returns, it's an error
-    PLOG(ERROR) << "execv() failed for path: " << executable_path;
+    LOG_ERROR << "execv() failed for path: " << executable_path;
     _exit(127);  // Standard exit code for command not found/failed exec
   }
   // Parent process
-  LOG(INFO) << "Process started. PID: " << *pid_;
+  LOG_INFO << "Process started. PID: " << *pid_;
 }
 
 Process::~Process() {
   if (isRunning()) {
-    terminate();
+    (void)terminate();
   }
 }
 
@@ -156,14 +156,14 @@ auto Process::terminate() -> bool {
   }
 
   if (kill(*pid_, SIGKILL) == 0) {
-    LOG(INFO) << "Process terminated. PID: " << *pid_;
+    LOG_INFO << "Process terminated. PID: " << *pid_;
     int status;
     waitpid(*pid_, &status, 0);  // Clean up zombie process
     pid_.reset();
     return true;
   }
 
-  PLOG(ERROR) << "Failed to kill process with PID: " << *pid_;
+  LOG_ERROR << "Failed to kill process with PID: " << *pid_;
   return false;
 }
 
@@ -179,7 +179,7 @@ auto Process::waitForExit() -> std::optional<int> {
       return WEXITSTATUS(status);
     }
   } else {
-    PLOG(ERROR) << "waitpid() failed for PID: " << *pid_;
+    LOG_ERROR << "waitpid() failed for PID: " << *pid_;
   }
 
   return std::nullopt;
@@ -187,3 +187,4 @@ auto Process::waitForExit() -> std::optional<int> {
 #endif
 
 }  // namespace picoradar::common
+

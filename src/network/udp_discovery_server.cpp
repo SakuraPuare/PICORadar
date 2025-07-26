@@ -1,6 +1,6 @@
 #include "network/udp_discovery_server.hpp"
 #include "common/constants.hpp"
-#include <glog/logging.h>
+#include "common/logging.hpp"
 
 namespace picoradar {
 namespace network {
@@ -23,7 +23,7 @@ UdpDiscoveryServer::~UdpDiscoveryServer() {
 }
 
 void UdpDiscoveryServer::start() {
-    LOG(INFO) << "Starting UDP discovery server on port " << socket_.local_endpoint().port();
+    LOG_INFO << "Starting UDP discovery server on port " << socket_.local_endpoint().port();
     do_receive();
 }
 
@@ -49,18 +49,18 @@ void UdpDiscoveryServer::do_receive() {
 void UdpDiscoveryServer::handle_receive(const boost::system::error_code& error, std::size_t bytes_transferred) {
     if (!error) {
         std::string received_message(recv_buffer_.data(), bytes_transferred);
-        DLOG(INFO) << "Discovery server received: '" << received_message << "' from " << remote_endpoint_.address().to_string() << ":" << remote_endpoint_.port();
+        LOG_DEBUG << "Discovery server received: '" << received_message << "' from " << remote_endpoint_.address().to_string() << ":" << remote_endpoint_.port();
 
         if (received_message == config::kDiscoveryRequest) {
-            LOG(INFO) << "Received valid discovery request from " << remote_endpoint_.address().to_string() << ":" << remote_endpoint_.port() << ". Responding with " << server_address_response_;
+            LOG_INFO << "Received valid discovery request from " << remote_endpoint_.address().to_string() << ":" << remote_endpoint_.port() << ". Responding with " << server_address_response_;
             do_send(server_address_response_, remote_endpoint_);
         } else {
-             LOG(WARNING) << "Received invalid discovery request: " << received_message;
+             LOG_WARNING << "Received invalid discovery request: " << received_message;
         }
         
         do_receive();
     } else if (error != net::error::operation_aborted) {
-        LOG(ERROR) << "Discovery server receive error: " << error.message();
+        LOG_ERROR << "Discovery server receive error: " << error.message();
     }
 }
 
@@ -68,7 +68,7 @@ void UdpDiscoveryServer::do_send(const std::string& message, udp::endpoint targe
     socket_.async_send_to(net::buffer(message), target_endpoint,
         [this](const boost::system::error_code& ec, std::size_t /*bytes_transferred*/) {
             if (ec) {
-                LOG(ERROR) << "Discovery server send error: " << ec.message();
+                LOG_ERROR << "Discovery server send error: " << ec.message();
             }
         });
 }

@@ -1,61 +1,166 @@
 #include "logging.hpp"
-
 #include <glog/logging.h>
 
-#include <filesystem>
-#include <iostream>
-#include <memory>
-#include <string>
+namespace logger {
 
-namespace picoradar::common {
-
-// glog不拥有sink的所有权。我们需要自己管理其生命周期。
-// 使用一个静态的unique_ptr确保它在程序的整个生命周期内都存在。
-static std::unique_ptr<PrefixedLogSink> g_log_sink;
-
-PrefixedLogSink::PrefixedLogSink(std::string prefix)
-    : prefix_(std::move(prefix)) {}
-
-void PrefixedLogSink::send(google::LogSeverity severity,
-                           const char* full_filename, const char* base_filename,
-                           int line, const struct ::google::LogMessageTime& tm,
-                           const char* message, size_t message_len) {
-  // 先将我们的自定义前缀写入stderr。
-  std::cerr << prefix_;
-
-  // 使用glog的内部函数来格式化并写入日志的其余部分。
-  // 这确保了我们的输出与glog默认的stderr输出格式完全一致。
-  google::LogMessage(full_filename, line, severity).stream() << message;
+// Helper to convert our LogLevel to glog's severity
+static google::LogSeverity ToGlogSeverity(LogLevel level) {
+    switch (level) {
+        case LogLevel::TRACE:   return google::GLOG_INFO;
+        case LogLevel::DEBUG:   return google::GLOG_INFO;
+        case LogLevel::INFO:    return google::GLOG_INFO;
+        case LogLevel::WARNING: return google::GLOG_WARNING;
+        case LogLevel::ERROR:   return google::GLOG_ERROR;
+        case LogLevel::FATAL:   return google::GLOG_FATAL;
+        default:                return google::GLOG_INFO;
+    }
 }
 
-void setup_logging(std::string_view app_name, bool log_to_file,
-                   const std::string& log_dir, const std::string& log_prefix) {
-  google::InitGoogleLogging(app_name.data());
+LogLevel Logger::current_log_level_ = LogLevel::INFO;
 
-  // 默认情况下，glog会向stderr记录日志。
-  // 如果我们使用自己的sink或要记录到文件，我们会禁用它。
-  FLAGS_logtostderr = false;
+void Logger::Init(const std::string& program_name,
+                  const std::string& log_dir,
+                  LogLevel min_log_level,
+                  uint32_t max_log_size,
+                  bool log_to_stderr) {
+    static std::once_flag once_flag;
+    std::call_once(once_flag, [&]() {
+        google::InitGoogleLogging(program_name.c_str());
+        
+        // Create log directory if it doesn't exist
+        if (!google::IsGoogleLoggingInitialized() || log_dir != "./logs") {
+            google::ShutdownGoogleLogging();
+            google::InitGoogleLogging(program_name.c_str());
+        }
+        google::SetLogDestination(google::INFO, (log_dir + "/INFO_").c_str());
+        google::SetLogDestination(google::WARNING, (log_dir + "/WARNING_").c_str());
+        google::SetLogDestination(google::ERROR, (log_dir + "/ERROR_").c_str());
+        google::SetLogDestination(google::FATAL, (log_dir + "/FATAL_").c_str());
 
-  if (!log_prefix.empty()) {
-    // 如果提供了前缀，我们就使用自定义的sink。
-    g_log_sink = std::make_unique<PrefixedLogSink>(log_prefix);
-    google::AddLogSink(g_log_sink.get());
-  }
+        current_log_level_ = min_log_level;
+        google::SetStderrLogging(ToGlogSeverity(min_log_level));
+        
+        FLAGS_max_log_size = max_log_size;
+        
+        FLAGS_logtostderr = log_to_stderr;
+        FLAGS_log_prefix = true;
+        FLAGS_timestamp_in_logfile_name = true;
+        // FLAGS_log_thread_id = true; // This flag might not be available in all glog versions.
 
-  if (log_to_file) {
-    std::filesystem::path log_path = log_dir;
-    FLAGS_log_dir = log_dir;
-    if (!std::filesystem::exists(log_path)) {
-      std::filesystem::create_directories(log_path);
-    }
-    // 如果没有前缀，我们希望在记录到文件的同时，也记录到stderr。
-    if (log_prefix.empty()) {
-      FLAGS_alsologtostderr = true;
-    }
-  } else if (log_prefix.empty()) {
-    // 如果不记录到文件且没有前缀sink，则启用默认的stderr日志记录。
-    FLAGS_logtostderr = true;
-  }
+        google::InstallFailureSignalHandler();
+        google::InstallFailureWriter([](const char* data, size_t size) {
+            Logger::GetInstance().WriteFatalLog(data, size);
+        });
+    });
 }
 
-}  // namespace picoradar::common
+Logger& Logger::GetInstance() {
+    static Logger instance;
+    return instance;
+}
+
+void Logger::SetLogLevel(LogLevel level) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    current_log_level_ = level;
+    google::SetStderrLogging(ToGlogSeverity(level));
+}
+
+LogLevel Logger::GetCurrentLogLevel() {
+    return current_log_level_;
+}
+
+Logger::LogStream::LogStream(const char* file, int line, LogLevel level)
+    : file_(file), line_(line), level_(level) {}
+
+Logger::LogStream::~LogStream() {
+    if (level_ >= Logger::GetCurrentLogLevel()) {
+        std::lock_guard<std::mutex> lock(Logger::GetInstance().mutex_);
+        switch (level_) {
+            case LogLevel::TRACE:
+                google::LogMessage(file_, line_, google::GLOG_INFO).stream() 
+                    << "[TRACE] " << stream_.str();
+                break;
+            case LogLevel::DEBUG:
+                google::LogMessage(file_, line_, google::GLOG_INFO).stream() 
+                    << "[DEBUG] " << stream_.str();
+                break;
+            case LogLevel::INFO:
+                google::LogMessage(file_, line_, google::GLOG_INFO).stream() 
+                    << stream_.str();
+                break;
+            case LogLevel::WARNING:
+                google::LogMessage(file_, line_, google::GLOG_WARNING).stream() 
+                    << stream_.str();
+                break;
+            case LogLevel::ERROR:
+                google::LogMessage(file_, line_, google::GLOG_ERROR).stream() 
+                    << stream_.str();
+                break;
+            case LogLevel::FATAL:
+                google::LogMessage(file_, line_, google::GLOG_FATAL).stream() 
+                    << stream_.str();
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+Logger::LogStreamIf::LogStreamIf(const char* file, int line, LogLevel level, bool condition)
+    : file_(file), line_(line), level_(level), condition_(condition) {}
+
+Logger::LogStreamIf::~LogStreamIf() {
+    if (condition_ && level_ >= Logger::GetCurrentLogLevel()) {
+        std::lock_guard<std::mutex> lock(Logger::GetInstance().mutex_);
+        switch (level_) {
+            case LogLevel::TRACE:
+                google::LogMessage(file_, line_, google::GLOG_INFO).stream() 
+                    << "[TRACE] " << stream_.str();
+                break;
+            case LogLevel::DEBUG:
+                google::LogMessage(file_, line_, google::GLOG_INFO).stream()
+                    << "[DEBUG] " << stream_.str();
+                break;
+            case LogLevel::INFO:
+                google::LogMessage(file_, line_, google::GLOG_INFO).stream()
+                    << stream_.str();
+                break;
+            case LogLevel::WARNING:
+                google::LogMessage(file_, line_, google::GLOG_WARNING).stream()
+                    << stream_.str();
+                break;
+            case LogLevel::ERROR:
+                google::LogMessage(file_, line_, google::GLOG_ERROR).stream()
+                    << stream_.str();
+                break;
+            case LogLevel::FATAL:
+                google::LogMessage(file_, line_, google::GLOG_FATAL).stream()
+                    << stream_.str();
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void Logger::WriteFatalLog(const char* data, int size) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    google::LogMessageFatal(__FILE__, __LINE__).stream() 
+        << std::string(data, size);
+}
+
+void Logger::Flush() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    google::FlushLogFiles(google::INFO);
+    google::FlushLogFiles(google::WARNING);
+    google::FlushLogFiles(google::ERROR);
+    google::FlushLogFiles(google::FATAL);
+}
+
+Logger::Logger() = default;
+
+Logger::~Logger() {
+    google::ShutdownGoogleLogging();
+}
+
+} // namespace logger

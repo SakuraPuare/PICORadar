@@ -136,9 +136,9 @@ SingleInstanceGuard::SingleInstanceGuard(const std::string& lock_file_name) {
       continue;
     }
 
-    // 进程仍在运行
-    throw std::runtime_error("PICO Radar server is already running.");
   }
+  // 进程仍在运行
+  throw std::runtime_error("PICO Radar server is already running.");
 }
 
 SingleInstanceGuard::~SingleInstanceGuard() {

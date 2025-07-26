@@ -7,7 +7,7 @@ add_executable(core_tests
 
 target_link_libraries(core_tests
     PRIVATE
-    core_logic
+    core_lib
     common_lib
     GTest::gtest
     GTest::gmock

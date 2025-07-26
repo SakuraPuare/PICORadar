@@ -4,20 +4,20 @@ add_library(network_lib STATIC)
 
 target_sources(network_lib
     PRIVATE
-        websocket_server.cpp
-        udp_discovery_server.cpp
+    udp_discovery_server.cpp
+    websocket_server.cpp
+)
+
+target_include_directories(network_lib
     PUBLIC
-        websocket_server.hpp
-        udp_discovery_server.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_include_directories(network_lib PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-
-target_link_libraries(network_lib PUBLIC
+target_link_libraries(network_lib
+    PUBLIC
+    project_includes
     common_lib
-    core_logic
+    core_lib
+    proto_gen
     Boost::beast
-    project_includes # 链接到中央包含目录
 )

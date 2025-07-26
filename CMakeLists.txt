@@ -126,8 +126,8 @@ add_subdirectory(src/network)
 add_subdirectory(src/server)
 
 if(PICORADAR_BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(test)
+  enable_testing()
+  add_subdirectory(test)
 endif()
 
 # ==============================================================================

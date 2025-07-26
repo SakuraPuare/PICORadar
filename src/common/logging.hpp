@@ -1,51 +1,113 @@
 #pragma once
 
 #include <glog/logging.h>
-
+#include <glog/raw_logging.h>
 #include <string>
-#include <string_view>
+#include <memory>
+#include <mutex>
+#include <sstream>
+#include <iomanip>
 
-namespace picoradar::common {
+namespace logger {
 
-/**
- * @brief 一个自定义的glog LogSink，用于在每条日志消息前添加一个前缀。
- *
- * 这允许我们在测试中区分来自不同进程（如服务器和客户端）的日志输出。
- */
-class PrefixedLogSink : public google::LogSink {
- public:
-  /**
-   * @brief 构造函数。
-   * @param prefix 要添加到每条日志消息开头的字符串。
-   */
-  explicit PrefixedLogSink(std::string prefix);
-
-  void send(google::LogSeverity severity, const char* full_filename,
-            const char* base_filename, int line,
-            const struct ::google::LogMessageTime& tm, const char* message,
-            size_t message_len) override;
-
- private:
-  const std::string prefix_;
+enum class LogLevel {
+    TRACE = 0,
+    DEBUG,
+    INFO,
+    WARNING,
+    ERROR,
+    FATAL,
+    NUM_SEVERITIES
 };
 
-/**
- * @brief 初始化应用程序的日志系统。
- *
- * 这个函数封装了 glog 的初始化和配置逻辑，确保了日志系统
- * 在整个应用程序中的行为一致性。它会根据指定的程序名称设置
- * 日志，并可以选择性地将日志输出到文件和/或标准错误流。
- *
- * @param app_name 应用程序的名称，通常是 argv[0]。
- *                 用于glog内部识别和日志文件命名。
- * @param log_to_file 是否将日志写入文件。默认为 true。
- * @param log_dir 日志文件存放的目录。默认为 "./logs"。
- *                如果目录不存在，该函数会自动创建。
- * @param log_prefix 如果提供，将在每条控制台日志消息前添加此文本前缀 (例如,
- * "[SERVER] ")。 这对于在集成测试中区分日志源特别有用。
- */
-void setup_logging(std::string_view app_name, bool log_to_file = true,
-                   const std::string& log_dir = "./logs",
-                   const std::string& log_prefix = "");
+class Logger {
+public:
+    // 初始化日志系统
+    static void Init(const std::string& program_name,
+                    const std::string& log_dir = "./logs",
+                    LogLevel min_log_level = LogLevel::INFO,
+                    uint32_t max_log_size = 10, // MB
+                    bool log_to_stderr = false);
+    
+    // 获取单例
+    static Logger& GetInstance();
+    
+    // 设置日志级别
+    void SetLogLevel(LogLevel level);
+    
+    // 流式日志输出
+    class LogStream {
+    public:
+        LogStream(const char* file, int line, LogLevel level);
+            
+        ~LogStream();
+        
+        template<typename T>
+        LogStream& operator<<(const T& val) {
+            stream_ << val;
+            return *this;
+        }
+        
+    private:
+        std::ostringstream stream_;
+        const char* file_;
+        int line_;
+        LogLevel level_;
+    };
+    
+    // 条件日志
+    class LogStreamIf {
+    public:
+        LogStreamIf(const char* file, int line, LogLevel level, bool condition);
+            
+        ~LogStreamIf();
+        
+        template<typename T>
+        LogStreamIf& operator<<(const T& val) {
+            if (condition_) {
+                stream_ << val;
+            }
+            return *this;
+        }
+        
+    private:
+        std::ostringstream stream_;
+        const char* file_;
+        int line_;
+        LogLevel level_;
+        bool condition_;
+    };
+    
+    // 写入致命错误日志
+    void WriteFatalLog(const char* data, int size);
+    
+    // 手动刷新日志
+    void Flush();
 
-}  // namespace picoradar::common
+    // 获取当前日志级别
+    static LogLevel GetCurrentLogLevel();
+    
+private:
+    Logger();
+    ~Logger();
+    
+    std::mutex mutex_;
+    static LogLevel current_log_level_;
+};
+
+// 方便使用的宏定义
+#define LOG_TRACE logger::Logger::LogStream(__FILE__, __LINE__, logger::LogLevel::TRACE)
+#define LOG_DEBUG logger::Logger::LogStream(__FILE__, __LINE__, logger::LogLevel::DEBUG)
+#define LOG_INFO logger::Logger::LogStream(__FILE__, __LINE__, logger::LogLevel::INFO)
+#define LOG_WARNING logger::Logger::LogStream(__FILE__, __LINE__, logger::LogLevel::WARNING)
+#define LOG_ERROR logger::Logger::LogStream(__FILE__, __LINE__, logger::LogLevel::ERROR)
+#define LOG_FATAL logger::Logger::LogStream(__FILE__, __LINE__, logger::LogLevel::FATAL)
+
+#define LOG_IF_TRACE(condition) logger::Logger::LogStreamIf(__FILE__, __LINE__, logger::LogLevel::TRACE, condition)
+#define LOG_IF_DEBUG(condition) logger::Logger::LogStreamIf(__FILE__, __LINE__, logger::LogLevel::DEBUG, condition)
+#define LOG_IF_INFO(condition) logger::Logger::LogStreamIf(__FILE__, __LINE__, logger::LogLevel::INFO, condition)
+#define LOG_IF_WARNING(condition) logger::Logger::LogStreamIf(__FILE__, __LINE__, logger::LogLevel::WARNING, condition)
+#define LOG_IF_ERROR(condition) logger::Logger::LogStreamIf(__FILE__, __LINE__, logger::LogLevel::ERROR, condition)
+#define LOG_IF_FATAL(condition) logger::Logger::LogStreamIf(__FILE__, __LINE__, logger::LogLevel::FATAL, condition)
+
+} // namespace logger

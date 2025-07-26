@@ -1,12 +1,27 @@
 # src/server/CMakeLists.txt
 
-add_executable(server
-    main.cpp
+# Create the library
+add_library(server_lib STATIC)
+
+target_sources(server_lib
+    PRIVATE
+    server.cpp
 )
 
-# 只需要链接 network_lib，它会传递性地链接所有需要的库和包含目录
-target_link_libraries(server
-    PRIVATE
-    network_lib
-    common_lib # 显式链接 common_lib
+target_include_directories(server_lib
+    PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+target_link_libraries(server_lib
+    PUBLIC
+    project_includes
+    network_lib
+    core_lib
+    common_lib
+    proto_gen
+)
+
+# Create the executable that uses the library
+add_executable(server main.cpp)
+target_link_libraries(server PRIVATE server_lib)

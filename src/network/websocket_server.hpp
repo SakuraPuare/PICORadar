@@ -89,33 +89,27 @@ class Listener : public std::enable_shared_from_this<Listener> {
 };
 
 class WebsocketServer {
- public:
-  WebsocketServer(net::io_context& ioc, core::PlayerRegistry& registry);
-  ~WebsocketServer();
+public:
+    WebsocketServer(net::io_context& ioc, core::PlayerRegistry& registry);
+    ~WebsocketServer();
 
-  WebsocketServer(const WebsocketServer&) = delete;
-  auto operator=(const WebsocketServer&) -> WebsocketServer& = delete;
+    void start(const std::string& address, uint16_t port, int thread_count);
+    void stop();
 
-  void start(const std::string& address, uint16_t port, int thread_count);
-  void stop();
-
-  // Called by Listener
-  void onSessionOpened(const std::shared_ptr<Session>& session);
-  // Called by Session
-  void onSessionClosed(const std::shared_ptr<Session>& session);
-  void processMessage(const std::shared_ptr<Session>& session,
+    void onSessionOpened(const std::shared_ptr<Session>& session);
+    void onSessionClosed(const std::shared_ptr<Session>& session);
+    void processMessage(const std::shared_ptr<Session>& session,
                       const std::string& message);
+    void broadcastPlayerList();
 
- private:
-  void broadcastPlayerList();
-
-  net::io_context& ioc_;
-  core::PlayerRegistry& registry_;
-  std::shared_ptr<Listener> listener_;
-  std::unique_ptr<UdpDiscoveryServer> discovery_server_;
-  std::vector<std::thread> threads_;
-  std::set<std::shared_ptr<Session>> sessions_;
-  std::atomic<bool> is_running_{false};
+private:
+    net::io_context& ioc_;
+    core::PlayerRegistry& registry_;
+    std::shared_ptr<Listener> listener_;
+    std::unique_ptr<UdpDiscoveryServer> discovery_server_;
+    std::set<std::shared_ptr<Session>> sessions_;
+    std::vector<std::thread> threads_;
+    bool is_running_ = false;
 };
 
 }  // namespace picoradar::network
