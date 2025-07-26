@@ -41,13 +41,15 @@ void Session::run() {
 }
 
 void Session::do_accept() {
+  // 设置握手超时
+  beast::get_lowest_layer(ws_).expires_after(std::chrono::seconds(1));
+  
   ws_.async_accept(
       beast::bind_front_handler(&Session::on_accept, shared_from_this()));
 }
 
 void Session::on_accept(beast::error_code ec) {
-  auto endpoint = ws_.next_layer().socket().remote_endpoint().address().to_string() + 
-                  ":" + std::to_string(ws_.next_layer().socket().remote_endpoint().port());
+  auto endpoint = getSafeEndpoint();
   NetworkContext ctx("accept", endpoint);
   ctx.player_id = player_id_;
 
@@ -56,6 +58,9 @@ void Session::on_accept(beast::error_code ec) {
     server_.onSessionClosed(shared_from_this());
     return;
   }
+  
+  // 关闭超时，允许长连接
+  beast::get_lowest_layer(ws_).expires_never();
   
   ErrorLogger::logOperationSuccess(ctx);
   do_read();
@@ -68,8 +73,7 @@ void Session::do_read() {
 }
 
 void Session::on_read(beast::error_code ec, std::size_t bytes_transferred) {
-  auto endpoint = ws_.next_layer().socket().remote_endpoint().address().to_string() + 
-                  ":" + std::to_string(ws_.next_layer().socket().remote_endpoint().port());
+  auto endpoint = getSafeEndpoint();
   NetworkContext ctx("read", endpoint);
   ctx.player_id = player_id_;
   ctx.bytes_transferred = bytes_transferred;
@@ -115,8 +119,7 @@ void Session::do_write() {
 }
 
 void Session::on_write(beast::error_code ec, std::size_t bytes_transferred) {
-  auto endpoint = ws_.next_layer().socket().remote_endpoint().address().to_string() + 
-                  ":" + std::to_string(ws_.next_layer().socket().remote_endpoint().port());
+  auto endpoint = getSafeEndpoint();
   NetworkContext ctx("write", endpoint);
   ctx.player_id = player_id_;
   ctx.bytes_transferred = bytes_transferred;
@@ -330,6 +333,18 @@ void WebsocketServer::broadcastPlayerList() {
   for (const auto& session : sessions_) {
     session->send(serialized_response);
   }
+}
+
+std::string Session::getSafeEndpoint() const {
+  try {
+    if (ws_.next_layer().socket().is_open()) {
+      auto endpoint = ws_.next_layer().socket().remote_endpoint();
+      return endpoint.address().to_string() + ":" + std::to_string(endpoint.port());
+    }
+  } catch (const std::exception& e) {
+    // Socket is closed or not connected, return placeholder
+  }
+  return "disconnected";
 }
 
 }  // namespace picoradar::network

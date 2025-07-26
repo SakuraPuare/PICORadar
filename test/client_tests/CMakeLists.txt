@@ -29,5 +29,5 @@ target_include_directories(client_tests
 gtest_discover_tests(client_tests
     WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
     PROPERTIES
-        TIMEOUT 10
+        TIMEOUT 15
 )

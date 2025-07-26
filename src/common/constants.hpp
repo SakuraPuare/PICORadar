@@ -20,8 +20,8 @@ const std::string kDiscoveryResponsePrefix = "PICORADAR_SERVER_AT_";
 constexpr double kInterpolationPeriodS = 0.1;  // 100ms
 
 // Network timeouts
-constexpr int kDefaultConnectionTimeoutSeconds = 30;
-constexpr int kDefaultReadTimeoutSeconds = 10;
+constexpr int kDefaultConnectionTimeoutSeconds = 1;
+constexpr int kDefaultReadTimeoutSeconds = 1;
 
 // Performance settings
 constexpr size_t kDefaultMaxMessageSize = 1024 * 1024;  // 1MB

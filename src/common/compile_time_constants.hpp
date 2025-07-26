@@ -19,10 +19,10 @@ constexpr std::size_t kReceiveBufferSize = 1024;
 constexpr std::size_t kMaxConnections = 1000;
 
 // 超时相关常量 (毫秒)
-constexpr auto kDefaultConnectionTimeout = std::chrono::milliseconds(5000);
-constexpr auto kDefaultHandshakeTimeout = std::chrono::milliseconds(3000);
+constexpr auto kDefaultConnectionTimeout = std::chrono::milliseconds(1000);
+constexpr auto kDefaultHandshakeTimeout = std::chrono::milliseconds(1000);
 constexpr auto kDefaultPingInterval = std::chrono::milliseconds(30000);
-constexpr auto kDefaultPongTimeout = std::chrono::milliseconds(5000);
+constexpr auto kDefaultPongTimeout = std::chrono::milliseconds(1000);
 
 // 重试相关常量
 constexpr int kMaxRetryAttempts = 3;

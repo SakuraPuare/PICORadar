@@ -58,7 +58,7 @@ TEST_F(ConfigManagerTest, LoadFromFile) {
         "server_port": 8080,
         "server_host": "localhost",
         "debug": true,
-        "timeout": 30,
+        "timeout": 1,
         "auth_token": "test_token_123"
     })");
     
@@ -83,7 +83,7 @@ TEST_F(ConfigManagerTest, LoadFromFile) {
     
     auto timeout = config.getInt("timeout");
     EXPECT_TRUE(timeout.has_value());
-    EXPECT_EQ(timeout.value(), 30);
+    EXPECT_EQ(timeout.value(), 1);
     
     auto token = config.getString("auth_token");
     EXPECT_TRUE(token.has_value());

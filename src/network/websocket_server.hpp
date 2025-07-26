@@ -48,6 +48,9 @@ class Session : public std::enable_shared_from_this<Session> {
   // Getters and setters for player_id
   auto getPlayerId() const -> const std::string& { return player_id_; }
   void setPlayerId(const std::string& id) { player_id_ = id; }
+  
+  // Safe method to get endpoint string
+  std::string getSafeEndpoint() const;
 
  private:
   void do_write();

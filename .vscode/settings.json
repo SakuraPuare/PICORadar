@@ -4,6 +4,15 @@
         "expected": "cpp",
         "optional": "cpp",
         "variant": "cpp",
-        "stdexcept": "cpp"
+        "stdexcept": "cpp",
+        "array": "cpp",
+        "complex": "cpp",
+        "memory": "cpp",
+        "format": "cpp",
+        "future": "cpp",
+        "istream": "cpp",
+        "functional": "cpp",
+        "tuple": "cpp",
+        "utility": "cpp"
     }
 }

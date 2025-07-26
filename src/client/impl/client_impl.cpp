@@ -47,6 +47,12 @@ std::future<void> Client::Impl::connect(const std::string& server_address,
         return future;
     }
 
+    // 确保之前的网络线程已经完全退出
+    if (network_thread_.joinable()) {
+        ioc_->stop();
+        network_thread_.join();
+    }
+
     // 重置连接状态
     connect_promise_ = std::promise<void>();
     connect_promise_set_ = false;
@@ -58,7 +64,9 @@ std::future<void> Client::Impl::connect(const std::string& server_address,
     // 解析服务器地址
     auto [host, port] = parse_address(server_address);
     
-    // 创建新的 WebSocket 流
+    // 重新创建io_context和相关组件以确保状态清洁
+    ioc_ = std::make_unique<net::io_context>();
+    resolver_ = std::make_unique<tcp::resolver>(*ioc_);
     ws_ = std::make_unique<websocket::stream<beast::tcp_stream>>(*ioc_);
     
     // 设置 WebSocket 选项
@@ -73,14 +81,27 @@ std::future<void> Client::Impl::connect(const std::string& server_address,
     set_state(ClientState::Connecting);
     
     // 启动网络线程
-    if (!network_thread_.joinable()) {
-        network_thread_ = std::thread(&Client::Impl::run_network_thread, this);
-    }
+    network_thread_ = std::thread(&Client::Impl::run_network_thread, this);
+    
+    // 为DNS解析设置超时
+    auto resolve_timer = std::make_shared<net::steady_timer>(*ioc_);
+    resolve_timer->expires_after(std::chrono::seconds(3));
+    resolve_timer->async_wait([this, resolve_timer](beast::error_code ec) {
+        if (!ec && get_state() == ClientState::Connecting) {
+            LOG_ERROR << "DNS resolution timeout";
+            safe_set_promise_exception(std::make_exception_ptr(
+                std::runtime_error("DNS resolution timeout")));
+            if (ioc_) {
+                ioc_->stop();
+            }
+        }
+    });
     
     // 开始异步解析
     resolver_->async_resolve(
         host, port,
-        [this](beast::error_code ec, tcp::resolver::results_type results) {
+        [this, resolve_timer](beast::error_code ec, tcp::resolver::results_type results) {
+            resolve_timer->cancel();  // 取消超时定时器
             handle_resolve(ec, results);
         });
     
@@ -91,10 +112,16 @@ std::future<void> Client::Impl::connect(const std::string& server_address,
 void Client::Impl::disconnect() {
     LOG_INFO << "Disconnecting client";
     
+    // 如果正在连接过程中，设置连接promise为异常
+    if (get_state() == ClientState::Connecting) {
+        safe_set_promise_exception(std::make_exception_ptr(
+            std::runtime_error("Connection cancelled by disconnect")));
+    }
+    
     set_state(ClientState::Disconnecting);
     
     if (ioc_) {
-        // 在 io_context 中执行关闭操作
+        // 在 io_context 中执行关闭操作，确保在正确的线程中执行
         net::post(*ioc_, [this]() {
             close_connection();
         });
@@ -186,11 +213,26 @@ void Client::Impl::handle_resolve(beast::error_code ec, tcp::resolver::results_t
         
         LOG_DEBUG << "DNS resolution successful";
         
+        // 为TCP连接设置超时
+        auto connect_timer = std::make_shared<net::steady_timer>(*ioc_);
+        connect_timer->expires_after(std::chrono::seconds(3));
+        connect_timer->async_wait([this, connect_timer](beast::error_code ec) {
+            if (!ec && get_state() == ClientState::Connecting) {
+                LOG_ERROR << "TCP connection timeout";
+                safe_set_promise_exception(std::make_exception_ptr(
+                    std::runtime_error("TCP connection timeout")));
+                if (ioc_) {
+                    ioc_->stop();
+                }
+            }
+        });
+        
         // 开始连接
-        beast::get_lowest_layer(*ws_).expires_after(std::chrono::seconds(30));
+        beast::get_lowest_layer(*ws_).expires_after(std::chrono::seconds(3));
         beast::get_lowest_layer(*ws_).async_connect(
             results,
-            [this](beast::error_code ec, tcp::resolver::results_type::endpoint_type endpoint) {
+            [this, connect_timer](beast::error_code ec, tcp::resolver::results_type::endpoint_type endpoint) {
+                connect_timer->cancel();  // 取消超时定时器
                 handle_connect(ec, endpoint);
             });
     } catch (const std::exception& e) {
@@ -225,8 +267,8 @@ void Client::Impl::handle_connect(beast::error_code ec, tcp::resolver::results_t
         // 关闭超时
         beast::get_lowest_layer(*ws_).expires_never();
         
-        // 设置超时
-        ws_->next_layer().expires_after(std::chrono::seconds(30));
+        // 设置WebSocket握手超时
+        ws_->next_layer().expires_after(std::chrono::seconds(2));
         
         // 进行 WebSocket 握手
         ws_->async_handshake(
@@ -264,14 +306,17 @@ void Client::Impl::handle_handshake(beast::error_code ec) {
         
         LOG_DEBUG << "WebSocket handshake successful";
         
+        // 设置为二进制模式以处理Protocol Buffers数据
+        ws_->binary(true);
+        
         // 关闭超时
         ws_->next_layer().expires_never();
         
+        // 开始读取消息（在发送认证请求之前）
+        start_read();
+        
         // 发送认证请求
         send_auth_request();
-        
-        // 开始读取消息
-        start_read();
     } catch (const std::exception& e) {
         LOG_ERROR << "Exception in handle_handshake: " << e.what();
         try {
@@ -408,8 +453,10 @@ void Client::Impl::process_server_message(const std::string& message) {
             safe_set_promise_value();
             LOG_INFO << "Authentication successful";
         } else {
+            set_state(ClientState::Disconnected);  // 设置为断开状态
             safe_set_promise_exception(std::make_exception_ptr(
                 std::runtime_error("Authentication failed: " + auth_resp.message())));
+            LOG_ERROR << "Authentication failed: " << auth_resp.message();
         }
     } else if (server_msg.has_player_list()) {
         if (get_state() == ClientState::Connected && player_list_callback_) {
@@ -467,14 +514,25 @@ void Client::Impl::handle_write(beast::error_code ec, std::size_t bytes_transfer
 }
 
 void Client::Impl::close_connection() {
-    if (ws_ && ws_->is_open()) {
-        LOG_DEBUG << "Closing WebSocket connection";
-        
-        beast::error_code ec;
-        ws_->close(websocket::close_code::normal, ec);
-        
-        if (ec) {
-            LOG_ERROR << "Error closing WebSocket: " << ec.message();
+    if (ws_) {
+        try {
+            if (ws_->is_open()) {
+                LOG_DEBUG << "Closing WebSocket connection";
+                
+                // 使用异步关闭来避免阻塞
+                ws_->async_close(websocket::close_code::normal,
+                    [](beast::error_code ec) {
+                        if (ec) {
+                            LOG_DEBUG << "WebSocket close completed with error: " << ec.message();
+                        } else {
+                            LOG_DEBUG << "WebSocket closed successfully";
+                        }
+                    });
+            }
+        } catch (const std::exception& e) {
+            LOG_ERROR << "Exception during WebSocket close: " << e.what();
+        } catch (...) {
+            LOG_ERROR << "Unknown exception during WebSocket close";
         }
     }
 }
@@ -527,7 +585,7 @@ void Client::Impl::safe_set_promise_value() {
 void Client::Impl::safe_set_promise_exception(std::exception_ptr ex) {
     if (!connect_promise_set_.exchange(true)) {
         try {
-            safe_set_promise_exception(ex);
+            connect_promise_.set_exception(ex);
         } catch (...) {
             // Promise already set, ignore
         }

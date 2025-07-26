@@ -1,11 +1,11 @@
 {
     "server": {
-        "port": 11451,
+        "port": 11452,
         "host": "0.0.0.0",
-        "websocket_port": 11451
+        "websocket_port": 11452
     },
     "auth": {
-        "token": "secure_production_token_change_me_2025"
+        "token": "pico_radar_secret_token"
     },
     "discovery": {
         "udp_port": 11452,
@@ -17,6 +17,11 @@
         "level": "INFO",
         "file_enabled": true,
         "console_enabled": true
+    },
+    "network": {
+        "max_connections": 20,
+        "broadcast_interval_ms": 50,
+        "heartbeat_interval_ms": 30000
     },
     "timeouts": {
         "client_handshake_ms": 1000,

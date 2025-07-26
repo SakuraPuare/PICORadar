@@ -37,7 +37,7 @@ if(USE_VALGRIND)
         add_test(NAME core_tests_memcheck COMMAND ${VALGRIND_EXECUTABLE} --leak-check=full --show-leak-kinds=all --track-origins=yes -s $<TARGET_FILE:core_tests>)
         set_tests_properties(core_tests_memcheck PROPERTIES 
             WILL_FAIL true
-            TIMEOUT 10
+            TIMEOUT 5
         )
 
     else()
