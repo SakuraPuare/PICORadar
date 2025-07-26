@@ -7,8 +7,6 @@ namespace picoradar::config {
 
 // Websocket and network settings
 constexpr uint16_t kDefaultServicePort = 11451;
-const std::string kDefaultAuthToken =
-    "pico_radar_secret_token";  // Warning: For internal/dev use ONLY.
 
 // UDP Discovery
 constexpr uint16_t kDefaultDiscoveryPort = 11452;
@@ -18,4 +16,12 @@ const std::string kDiscoveryResponsePrefix = "PICORADAR_SERVER_AT_";
 // Client-side interpolation
 constexpr double kInterpolationPeriodS = 0.1;  // 100ms
 
-}  // namespace picoradar::config
+// Network timeouts
+constexpr int kDefaultConnectionTimeoutSeconds = 30;
+constexpr int kDefaultReadTimeoutSeconds = 10;
+
+// Performance settings
+constexpr size_t kDefaultMaxMessageSize = 1024 * 1024;  // 1MB
+constexpr size_t kDefaultMaxConnections = 1000;
+
+} // namespace picoradar::config  // namespace picoradar::config

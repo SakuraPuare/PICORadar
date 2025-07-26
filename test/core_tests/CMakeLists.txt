@@ -13,7 +13,10 @@ target_link_libraries(core_tests
     GTest::gmock
 )
 
-gtest_discover_tests(core_tests)
+gtest_discover_tests(core_tests
+    PROPERTIES
+        TIMEOUT 10
+)
 
 
 if(ENABLE_COVERAGE)

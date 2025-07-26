@@ -69,6 +69,7 @@ private:
     // 回调和 Promise
     Client::PlayerListCallback player_list_callback_;
     std::promise<void> connect_promise_;
+    std::atomic<bool> connect_promise_set_{false};
     
     // 消息队列和缓冲区
     beast::flat_buffer read_buffer_;
@@ -95,6 +96,12 @@ private:
     void close_connection();
     void set_state(ClientState new_state);
     ClientState get_state() const;
+    
+    // Promise安全设置辅助函数
+    template<typename T>
+    void safe_set_promise_value(T&& value);
+    void safe_set_promise_value();  // 为void promise的特化版本
+    void safe_set_promise_exception(std::exception_ptr ex);
     
     // 解析服务器地址
     std::pair<std::string, std::string> parse_address(const std::string& address);

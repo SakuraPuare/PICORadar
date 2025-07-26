@@ -8,20 +8,21 @@ PlayerRegistry::PlayerRegistry() = default;
 
 PlayerRegistry::~PlayerRegistry() = default;
 
-void PlayerRegistry::updatePlayer(const std::string& playerId,
-                                  const picoradar::PlayerData& data) {
+void PlayerRegistry::updatePlayer(std::string playerId,
+                                  picoradar::PlayerData data) {
   std::lock_guard<std::mutex> lock(mutex_);
-  players_[playerId] = data;
+  players_[std::move(playerId)] = std::move(data);
 }
 
-void PlayerRegistry::removePlayer(const std::string& playerId) {
+void PlayerRegistry::removePlayer(std::string playerId) {
   std::lock_guard<std::mutex> lock(mutex_);
   players_.erase(playerId);
 }
 
 auto PlayerRegistry::getAllPlayers() const
-    -> const std::unordered_map<std::string, picoradar::PlayerData>& {
-  return players_;
+    -> std::unordered_map<std::string, picoradar::PlayerData> {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return players_;  // 返回副本而非引用，线程安全
 }
 
 auto PlayerRegistry::getPlayer(const std::string& playerId) const

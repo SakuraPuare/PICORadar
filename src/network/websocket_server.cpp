@@ -2,6 +2,7 @@
 #include "common/logging.hpp"
 
 #include "client.pb.h"
+#include "common/config_manager.hpp"
 #include "common/constants.hpp"
 #include "server.pb.h"
 
@@ -231,7 +232,8 @@ void WebsocketServer::processMessage(const std::shared_ptr<Session>& session,
     LOG_DEBUG << "Processing auth request for player_id: '" << player_id << "' with token: '" << token << "'";
 
     // *** ACTUAL AUTHENTICATION LOGIC ***
-    const bool is_token_valid = (token == ::picoradar::config::kDefaultAuthToken);
+    const std::string expectedToken = config::getConfig().getAuthToken();
+    const bool is_token_valid = (token == expectedToken);
     LOG_DEBUG << "Server-side token check for '" << player_id << "': " << (is_token_valid ? "Valid" : "Invalid");
 
     if (is_token_valid && !player_id.empty()) {
@@ -243,8 +245,8 @@ void WebsocketServer::processMessage(const std::shared_ptr<Session>& session,
       player_data.set_player_id(player_id);
       player_data.set_timestamp(0);
 
-      // Add player to registry
-      registry_.updatePlayer(player_id, player_data);
+      // Add player to registry (using move semantics for better performance)
+      registry_.updatePlayer(player_id, std::move(player_data));
 
       LOG_INFO << "Player " << player_id << " authenticated successfully.";
 
@@ -294,7 +296,7 @@ void WebsocketServer::broadcastPlayerList() {
   ServerToClient response;
   auto* player_list = response.mutable_player_list();
 
-  const auto& players = registry_.getAllPlayers();
+  const auto players = registry_.getAllPlayers(); // 现在返回副本，去掉引用
   for (const auto& player : players) {
     auto* player_data = player_list->add_players();
     player_data->CopyFrom(player.second);

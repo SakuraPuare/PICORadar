@@ -23,25 +23,26 @@ class PlayerRegistry {
    *
    * 如果玩家ID已存在，则更新其数据；否则，添加为新玩家。
    * 此方法是线程安全的。
-   * @param data 玩家数据
+   * @param playerId 玩家ID（优化为move语义）
+   * @param data 玩家数据（优化为move语义）
    */
-  void updatePlayer(const std::string& playerId,
-                    const picoradar::PlayerData& data);
+  void updatePlayer(std::string playerId,
+                    picoradar::PlayerData data);
 
   /**
    * @brief 移除一个玩家。
    *
-   * @param playerId 要移除的玩家ID
+   * @param playerId 要移除的玩家ID（优化为move语义）
    */
-  void removePlayer(const std::string& playerId);
+  void removePlayer(std::string playerId);
 
   /**
    * @brief 获取所有当前玩家数据的快照。
    *
-   * @return 包含所有玩家数据的map引用
+   * @return 包含所有玩家数据的map副本（线程安全）
    */
   auto getAllPlayers() const
-      -> const std::unordered_map<std::string, picoradar::PlayerData>&;
+      -> std::unordered_map<std::string, picoradar::PlayerData>;
 
   /**
    * @brief 获取特定ID的玩家数据。

@@ -18,6 +18,13 @@ Client::Impl::Impl()
 
 Client::Impl::~Impl() {
     LOG_DEBUG << "Client::Impl destroying";
+    
+    // 如果有pending的promise，先设置异常避免promise析构时的问题
+    if (get_state() == ClientState::Connecting) {
+        safe_set_promise_exception(std::make_exception_ptr(
+            std::runtime_error("Client is being destroyed")));
+    }
+    
     disconnect();
 }
 
@@ -42,6 +49,7 @@ std::future<void> Client::Impl::connect(const std::string& server_address,
 
     // 重置连接状态
     connect_promise_ = std::promise<void>();
+    connect_promise_set_ = false;
     auto future = connect_promise_.get_future();
     
     player_id_ = player_id;
@@ -158,7 +166,7 @@ void Client::Impl::run_network_thread() {
         
         // 如果连接过程中出现异常，设置 promise
         try {
-            connect_promise_.set_exception(std::current_exception());
+            safe_set_promise_exception(std::current_exception());
         } catch (...) {
             // Promise 可能已经被设置
         }
@@ -168,67 +176,118 @@ void Client::Impl::run_network_thread() {
 }
 
 void Client::Impl::handle_resolve(beast::error_code ec, tcp::resolver::results_type results) {
-    if (ec) {
-        LOG_ERROR << "Resolve failed: " << ec.message();
-        connect_promise_.set_exception(std::make_exception_ptr(
-            std::runtime_error("DNS resolution failed: " + ec.message())));
-        return;
+    try {
+        if (ec) {
+            LOG_ERROR << "Resolve failed: " << ec.message();
+            safe_set_promise_exception(std::make_exception_ptr(
+                std::runtime_error("DNS resolution failed: " + ec.message())));
+            return;
+        }
+        
+        LOG_DEBUG << "DNS resolution successful";
+        
+        // 开始连接
+        beast::get_lowest_layer(*ws_).expires_after(std::chrono::seconds(30));
+        beast::get_lowest_layer(*ws_).async_connect(
+            results,
+            [this](beast::error_code ec, tcp::resolver::results_type::endpoint_type endpoint) {
+                handle_connect(ec, endpoint);
+            });
+    } catch (const std::exception& e) {
+        LOG_ERROR << "Exception in handle_resolve: " << e.what();
+        try {
+            safe_set_promise_exception(std::current_exception());
+        } catch (...) {
+            // Promise 可能已经被设置
+        }
+    } catch (...) {
+        LOG_ERROR << "Unknown exception in handle_resolve";
+        try {
+            safe_set_promise_exception(std::make_exception_ptr(
+                std::runtime_error("Unknown exception in DNS resolution")));
+        } catch (...) {
+            // Promise 可能已经被设置
+        }
     }
-    
-    LOG_DEBUG << "DNS resolution successful";
-    
-    // 开始连接
-    beast::get_lowest_layer(*ws_).expires_after(std::chrono::seconds(30));
-    beast::get_lowest_layer(*ws_).async_connect(
-        results,
-        [this](beast::error_code ec, tcp::resolver::results_type::endpoint_type endpoint) {
-            handle_connect(ec, endpoint);
-        });
 }
 
 void Client::Impl::handle_connect(beast::error_code ec, tcp::resolver::results_type::endpoint_type endpoint) {
-    if (ec) {
-        LOG_ERROR << "TCP connect failed: " << ec.message();
-        connect_promise_.set_exception(std::make_exception_ptr(
-            std::runtime_error("TCP connection failed: " + ec.message())));
-        return;
+    try {
+        if (ec) {
+            LOG_ERROR << "TCP connect failed: " << ec.message();
+            safe_set_promise_exception(std::make_exception_ptr(
+                std::runtime_error("TCP connection failed: " + ec.message())));
+            return;
+        }
+        
+        LOG_DEBUG << "TCP connection established to " << endpoint;
+        
+        // 关闭超时
+        beast::get_lowest_layer(*ws_).expires_never();
+        
+        // 设置超时
+        ws_->next_layer().expires_after(std::chrono::seconds(30));
+        
+        // 进行 WebSocket 握手
+        ws_->async_handshake(
+            endpoint.address().to_string() + ":" + std::to_string(endpoint.port()),
+            "/",
+            [this](beast::error_code ec) {
+                handle_handshake(ec);
+            });
+    } catch (const std::exception& e) {
+        LOG_ERROR << "Exception in handle_connect: " << e.what();
+        try {
+            safe_set_promise_exception(std::current_exception());
+        } catch (...) {
+            // Promise 可能已经被设置
+        }
+    } catch (...) {
+        LOG_ERROR << "Unknown exception in handle_connect";
+        try {
+            safe_set_promise_exception(std::make_exception_ptr(
+                std::runtime_error("Unknown exception in TCP connection")));
+        } catch (...) {
+            // Promise 可能已经被设置
+        }
     }
-    
-    LOG_DEBUG << "TCP connection established to " << endpoint;
-    
-    // 关闭超时
-    beast::get_lowest_layer(*ws_).expires_never();
-    
-    // 设置超时
-    ws_->next_layer().expires_after(std::chrono::seconds(30));
-    
-    // 进行 WebSocket 握手
-    ws_->async_handshake(
-        endpoint.address().to_string() + ":" + std::to_string(endpoint.port()),
-        "/",
-        [this](beast::error_code ec) {
-            handle_handshake(ec);
-        });
 }
 
 void Client::Impl::handle_handshake(beast::error_code ec) {
-    if (ec) {
-        LOG_ERROR << "WebSocket handshake failed: " << ec.message();
-        connect_promise_.set_exception(std::make_exception_ptr(
-            std::runtime_error("WebSocket handshake failed: " + ec.message())));
-        return;
+    try {
+        if (ec) {
+            LOG_ERROR << "WebSocket handshake failed: " << ec.message();
+            safe_set_promise_exception(std::make_exception_ptr(
+                std::runtime_error("WebSocket handshake failed: " + ec.message())));
+            return;
+        }
+        
+        LOG_DEBUG << "WebSocket handshake successful";
+        
+        // 关闭超时
+        ws_->next_layer().expires_never();
+        
+        // 发送认证请求
+        send_auth_request();
+        
+        // 开始读取消息
+        start_read();
+    } catch (const std::exception& e) {
+        LOG_ERROR << "Exception in handle_handshake: " << e.what();
+        try {
+            safe_set_promise_exception(std::current_exception());
+        } catch (...) {
+            // Promise 可能已经被设置
+        }
+    } catch (...) {
+        LOG_ERROR << "Unknown exception in handle_handshake";
+        try {
+            safe_set_promise_exception(std::make_exception_ptr(
+                std::runtime_error("Unknown exception in WebSocket handshake")));
+        } catch (...) {
+            // Promise 可能已经被设置
+        }
     }
-    
-    LOG_DEBUG << "WebSocket handshake successful";
-    
-    // 关闭超时
-    ws_->next_layer().expires_never();
-    
-    // 发送认证请求
-    send_auth_request();
-    
-    // 开始读取消息
-    start_read();
 }
 
 void Client::Impl::send_auth_request() {
@@ -244,7 +303,7 @@ void Client::Impl::send_auth_request() {
     std::string serialized;
     if (!client_msg.SerializeToString(&serialized)) {
         LOG_ERROR << "Failed to serialize auth request";
-        connect_promise_.set_exception(std::make_exception_ptr(
+        safe_set_promise_exception(std::make_exception_ptr(
             std::runtime_error("Failed to serialize authentication request")));
         return;
     }
@@ -260,7 +319,7 @@ void Client::Impl::send_auth_request() {
 void Client::Impl::handle_auth_write(beast::error_code ec, std::size_t bytes_transferred) {
     if (ec) {
         LOG_ERROR << "Auth write failed: " << ec.message();
-        connect_promise_.set_exception(std::make_exception_ptr(
+        safe_set_promise_exception(std::make_exception_ptr(
             std::runtime_error("Failed to send authentication request: " + ec.message())));
         return;
     }
@@ -277,33 +336,58 @@ void Client::Impl::start_read() {
 }
 
 void Client::Impl::handle_read(beast::error_code ec, std::size_t bytes_transferred) {
-    if (ec) {
-        if (ec == websocket::error::closed) {
-            LOG_INFO << "WebSocket connection closed by server";
-        } else {
-            LOG_ERROR << "Read failed: " << ec.message();
+    try {
+        if (ec) {
+            if (ec == websocket::error::closed) {
+                LOG_INFO << "WebSocket connection closed by server";
+            } else {
+                LOG_ERROR << "Read failed: " << ec.message();
+            }
+            
+            // 如果还在连接过程中，设置异常
+            if (get_state() == ClientState::Connecting) {
+                try {
+                    safe_set_promise_exception(std::make_exception_ptr(
+                        std::runtime_error("Connection lost during handshake: " + ec.message())));
+                } catch (...) {
+                    // Promise 可能已经被设置
+                }
+            }
+            
+            return;
         }
         
-        // 如果还在连接过程中，设置异常
+        // 处理收到的消息
+        std::string message = beast::buffers_to_string(read_buffer_.data());
+        read_buffer_.consume(bytes_transferred);
+        
+        LOG_DEBUG << "Received message (" << bytes_transferred << " bytes)";
+        
+        process_server_message(message);
+        
+        // 继续读取
+        if (get_state() != ClientState::Disconnecting) {
+            start_read();
+        }
+    } catch (const std::exception& e) {
+        LOG_ERROR << "Exception in handle_read: " << e.what();
         if (get_state() == ClientState::Connecting) {
-            connect_promise_.set_exception(std::make_exception_ptr(
-                std::runtime_error("Connection lost during handshake: " + ec.message())));
+            try {
+                safe_set_promise_exception(std::current_exception());
+            } catch (...) {
+                // Promise 可能已经被设置
+            }
         }
-        
-        return;
-    }
-    
-    // 处理收到的消息
-    std::string message = beast::buffers_to_string(read_buffer_.data());
-    read_buffer_.consume(bytes_transferred);
-    
-    LOG_DEBUG << "Received message (" << bytes_transferred << " bytes)";
-    
-    process_server_message(message);
-    
-    // 继续读取
-    if (get_state() != ClientState::Disconnecting) {
-        start_read();
+    } catch (...) {
+        LOG_ERROR << "Unknown exception in handle_read";
+        if (get_state() == ClientState::Connecting) {
+            try {
+                safe_set_promise_exception(std::make_exception_ptr(
+                    std::runtime_error("Unknown exception in message handling")));
+            } catch (...) {
+                // Promise 可能已经被设置
+            }
+        }
     }
 }
 
@@ -321,10 +405,10 @@ void Client::Impl::process_server_message(const std::string& message) {
         
         if (auth_resp.success()) {
             set_state(ClientState::Connected);
-            connect_promise_.set_value();
+            safe_set_promise_value();
             LOG_INFO << "Authentication successful";
         } else {
-            connect_promise_.set_exception(std::make_exception_ptr(
+            safe_set_promise_exception(std::make_exception_ptr(
                 std::runtime_error("Authentication failed: " + auth_resp.message())));
         }
     } else if (server_msg.has_player_list()) {
@@ -417,6 +501,37 @@ std::pair<std::string, std::string> Client::Impl::parse_address(const std::strin
     }
     
     return {host, port};
+}
+
+template<typename T>
+void Client::Impl::safe_set_promise_value(T&& value) {
+    if (!connect_promise_set_.exchange(true)) {
+        try {
+            connect_promise_.set_value(std::forward<T>(value));
+        } catch (...) {
+            // Promise already set, ignore
+        }
+    }
+}
+
+void Client::Impl::safe_set_promise_value() {
+    if (!connect_promise_set_.exchange(true)) {
+        try {
+            connect_promise_.set_value();
+        } catch (...) {
+            // Promise already set, ignore
+        }
+    }
+}
+
+void Client::Impl::safe_set_promise_exception(std::exception_ptr ex) {
+    if (!connect_promise_set_.exchange(true)) {
+        try {
+            safe_set_promise_exception(ex);
+        } catch (...) {
+            // Promise already set, ignore
+        }
+    }
 }
 
 } // namespace picoradar::client

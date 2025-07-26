@@ -5,6 +5,7 @@ add_library(common_lib STATIC)
 # Source files are private to the library
 target_sources(common_lib
     PRIVATE
+    config_manager.cpp
     process_utils.cpp
     single_instance_guard.cpp
     logging.cpp

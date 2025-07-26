@@ -28,10 +28,16 @@ if(USE_VALGRIND)
         message(STATUS "Valgrind found at: ${VALGRIND_EXECUTABLE}")
         # Define a memory check for each test
         add_test(NAME common_tests_memcheck COMMAND ${VALGRIND_EXECUTABLE} --leak-check=full --show-leak-kinds=all --track-origins=yes -s $<TARGET_FILE:common_tests>)
-        set_tests_properties(common_tests_memcheck PROPERTIES WILL_FAIL true)
+        set_tests_properties(common_tests_memcheck PROPERTIES 
+            WILL_FAIL true
+            TIMEOUT 10
+        )
 
         add_test(NAME core_tests_memcheck COMMAND ${VALGRIND_EXECUTABLE} --leak-check=full --show-leak-kinds=all --track-origins=yes -s $<TARGET_FILE:core_tests>)
-        set_tests_properties(core_tests_memcheck PROPERTIES WILL_FAIL true)
+        set_tests_properties(core_tests_memcheck PROPERTIES 
+            WILL_FAIL true
+            TIMEOUT 10
+        )
 
     else()
         message(WARNING "Valgrind not found. Memory checks will be skipped.")

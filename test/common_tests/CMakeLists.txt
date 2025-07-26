@@ -26,4 +26,7 @@ target_link_libraries(common_tests
     protobuf::libprotobuf
 )
 
-gtest_discover_tests(common_tests)
+gtest_discover_tests(common_tests
+    PROPERTIES
+        TIMEOUT 10
+)
