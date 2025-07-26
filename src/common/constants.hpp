@@ -5,6 +5,9 @@
 
 namespace picoradar::config {
 
+// 后备默认值 - 当配置文件不存在或读取失败时使用
+// 实际配置应优先从 ConfigManager 获取
+
 // Websocket and network settings
 constexpr uint16_t kDefaultServicePort = 11451;
 

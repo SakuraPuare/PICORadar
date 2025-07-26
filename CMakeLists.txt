@@ -75,6 +75,9 @@ find_package(Protobuf CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(glog CONFIG REQUIRED)
 find_package(Boost CONFIG REQUIRED COMPONENTS system thread beast) # Beast是头文件库，但依赖system
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
+find_package(tl-expected CONFIG REQUIRED)
 
 # ==============================================================================
 # Central Include Directories Management

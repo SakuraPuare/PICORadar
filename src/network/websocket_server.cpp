@@ -1,10 +1,12 @@
 #include "network/websocket_server.hpp"
-#include "common/logging.hpp"
-
-#include "client.pb.h"
-#include "common/config_manager.hpp"
+#include "network/error_context.hpp"
 #include "common/constants.hpp"
+#include "common/logging.hpp"
+#include "common/config_manager.hpp"
+#include "client.pb.h"
 #include "server.pb.h"
+#include "player.pb.h"
+#include <fmt/format.h>
 
 namespace picoradar::network {
 
@@ -13,8 +15,9 @@ namespace picoradar::network {
 
 void Listener::on_accept(beast::error_code ec) {
   if (ec) {
-    LOG_ERROR << "Listener accept error: " << ec.message();
-    return;  // To avoid infinite loop
+    NetworkContext ctx("accept", "listener");
+    ErrorLogger::logNetworkError(ctx, ec, "Failed to accept new connection");
+    return;
   }
 
   // Create the session and run it
@@ -30,11 +33,9 @@ void Listener::on_accept(beast::error_code ec) {
 // Session implementation
 
 Session::Session(tcp::socket&& socket, WebsocketServer& server)
-    : ws_(std::move(socket)), server_(server), strand_(ws_.get_executor()) {}
+    : ws_{std::move(socket)}, server_{server}, strand_{ws_.get_executor()} {}
 
 void Session::run() {
-  // We need to be executing within a strand to perform async operations
-  // on the I/O objects in this session.
   net::dispatch(strand_, beast::bind_front_handler(&Session::do_accept,
                                                    shared_from_this()));
 }
@@ -45,48 +46,55 @@ void Session::do_accept() {
 }
 
 void Session::on_accept(beast::error_code ec) {
+  auto endpoint = ws_.next_layer().socket().remote_endpoint().address().to_string() + 
+                  ":" + std::to_string(ws_.next_layer().socket().remote_endpoint().port());
+  NetworkContext ctx("accept", endpoint);
+  ctx.player_id = player_id_;
+
   if (ec) {
-    LOG_ERROR << "Session accept error: " << ec.message();
+    ErrorLogger::logNetworkError(ctx, ec, "WebSocket handshake failed");
     server_.onSessionClosed(shared_from_this());
     return;
   }
-
-  // Read a message
+  
+  ErrorLogger::logOperationSuccess(ctx);
   do_read();
 }
 
 void Session::do_read() {
-  // Read a message into our buffer
   ws_.binary(true);
   ws_.async_read(buffer_, beast::bind_front_handler(&Session::on_read,
                                                     shared_from_this()));
 }
 
 void Session::on_read(beast::error_code ec, std::size_t bytes_transferred) {
-  boost::ignore_unused(bytes_transferred);
+  auto endpoint = ws_.next_layer().socket().remote_endpoint().address().to_string() + 
+                  ":" + std::to_string(ws_.next_layer().socket().remote_endpoint().port());
+  NetworkContext ctx("read", endpoint);
+  ctx.player_id = player_id_;
+  ctx.bytes_transferred = bytes_transferred;
 
-  // This indicates that the session was closed
-  if (ec == websocket::error::closed) {
+  if (ec == websocket::error::closed || ec) {
+    if (ErrorHelper::isClientDisconnect(ec)) {
+      LOG_INFO << "Client disconnected: " << endpoint 
+               << (player_id_.empty() ? "" : " (Player: " + player_id_ + ")");
+    } else {
+      ErrorLogger::logNetworkError(ctx, ec, "Read operation failed");
+    }
     server_.onSessionClosed(shared_from_this());
     return;
   }
 
-  if (ec) {
-    LOG_ERROR << "Session read error: " << ec.message();
-    server_.onSessionClosed(shared_from_this());
-    return;
+  if (bytes_transferred > 0) {
+    ErrorLogger::logOperationSuccess(ctx);
   }
 
-  // It's a binary message
   const auto* msg_data = static_cast<const char*>(buffer_.data().data());
-  const std::string message(msg_data, buffer_.size());
+  std::string message(msg_data, buffer_.size());
 
   server_.processMessage(shared_from_this(), message);
 
-  // Clear the buffer
   buffer_.consume(buffer_.size());
-
-  // Do another read
   do_read();
 }
 
@@ -107,13 +115,19 @@ void Session::do_write() {
 }
 
 void Session::on_write(beast::error_code ec, std::size_t bytes_transferred) {
-  boost::ignore_unused(bytes_transferred);
+  auto endpoint = ws_.next_layer().socket().remote_endpoint().address().to_string() + 
+                  ":" + std::to_string(ws_.next_layer().socket().remote_endpoint().port());
+  NetworkContext ctx("write", endpoint);
+  ctx.player_id = player_id_;
+  ctx.bytes_transferred = bytes_transferred;
 
   if (ec) {
-    LOG_ERROR << "Session write error: " << ec.message();
+    ErrorLogger::logNetworkError(ctx, ec, "Write operation failed");
     server_.onSessionClosed(shared_from_this());
     return;
   }
+
+  ErrorLogger::logOperationSuccess(ctx);
 
   write_queue_.pop();
   if (!write_queue_.empty()) {
@@ -121,17 +135,22 @@ void Session::on_write(beast::error_code ec, std::size_t bytes_transferred) {
   }
 }
 
+void Session::close() {
+  net::post(strand_, [self = shared_from_this()]() {
+    beast::get_lowest_layer(self->ws_).close();
+  });
+}
+
 void Session::on_close(beast::error_code ec) {
-  if (ec) {
-    LOG_ERROR << "Session close error: " << ec.message();
-  }
+  boost::ignore_unused(ec);
+  LOG_DEBUG << "WebSocket connection closed";
 }
 
 //------------------------------------------------------------------------------
 // WebsocketServer implementation
 
 WebsocketServer::WebsocketServer(net::io_context& ioc,
-                                 core::PlayerRegistry& registry)
+                               core::PlayerRegistry& registry)
     : ioc_{ioc}, registry_{registry} {}
 
 WebsocketServer::~WebsocketServer() {
@@ -141,14 +160,14 @@ WebsocketServer::~WebsocketServer() {
 }
 
 void WebsocketServer::start(const std::string& address, uint16_t port,
-                            int thread_count) {
+                           int thread_count) {
   if (is_running_) {
+    LOG_WARNING << "WebSocket server is already running";
     return;
   }
 
-  auto const server_address = net::ip::make_address(address);
+  auto server_address = net::ip::make_address(address);
 
-  // Start the I/O context threads first
   threads_.reserve(thread_count);
   for (int i = 0; i < thread_count; ++i) {
     threads_.emplace_back([this] { ioc_.run(); });
@@ -156,14 +175,11 @@ void WebsocketServer::start(const std::string& address, uint16_t port,
 
   listener_ = std::make_shared<Listener>(
       ioc_, tcp::endpoint{server_address, port}, *this);
-  discovery_server_ = std::make_unique<UdpDiscoveryServer>(
-      ioc_, config::kDefaultDiscoveryPort, port, address);
 
   listener_->run();
-  discovery_server_->start();
 
   is_running_ = true;
-  LOG_INFO << "WebsocketServer started on " << address << ":" << port;
+  LOG_INFO << fmt::format("WebSocket server started on {}:{}", address, port);
 }
 
 void WebsocketServer::stop() {
@@ -171,24 +187,18 @@ void WebsocketServer::stop() {
     return;
   }
 
-  // Use post to avoid deadlocks if stop() is called from within an ioc handler
+  LOG_INFO << "Stopping WebSocket server...";
   net::post(ioc_, [this]() {
-    if (discovery_server_) {
-      discovery_server_->stop();
-    }
     if (listener_) {
       listener_->stop();
     }
     auto sessions_copy = sessions_;
-    for (const auto& session : sessions_copy) {
-      if (session) {
-        session->close();
-      }
+    for (auto& session : sessions_copy) {
+      session->close();
     }
     sessions_.clear();
+    ioc_.stop();
   });
-
-  ioc_.stop();
 
   for (auto& t : threads_) {
     if (t.joinable()) {
@@ -198,12 +208,12 @@ void WebsocketServer::stop() {
   threads_.clear();
 
   is_running_ = false;
-  LOG_INFO << "WebsocketServer stopped.";
+  LOG_INFO << "WebSocket server stopped";
 }
 
 void WebsocketServer::onSessionOpened(const std::shared_ptr<Session>& session) {
   sessions_.insert(session);
-  LOG_INFO << "Session opened. Total sessions: " << sessions_.size();
+  LOG_DEBUG << "Client connected. Total connections: " << sessions_.size();
 }
 
 void WebsocketServer::onSessionClosed(const std::shared_ptr<Session>& session) {
@@ -211,92 +221,102 @@ void WebsocketServer::onSessionClosed(const std::shared_ptr<Session>& session) {
     registry_.removePlayer(session->getPlayerId());
   }
   if (sessions_.erase(session) != 0u) {
-    LOG_INFO << "Session closed. Total sessions: " << sessions_.size();
+    LOG_DEBUG << "Client disconnected. Total connections: " << sessions_.size();
     broadcastPlayerList();
   }
 }
 
 void WebsocketServer::processMessage(const std::shared_ptr<Session>& session,
-                                     const std::string& message) {
-  ClientToServer request;
-  if (!request.ParseFromString(message)) {
-    LOG_WARNING << "Failed to parse ClientToServer message.";
-    return;
-  }
+                                    const std::string& raw_message) {
+  try {
+    ::picoradar::ClientToServer client_msg;
+    if (!client_msg.ParseFromString(raw_message)) {
+      LOG_WARNING << "Failed to parse client message";
+      return;
+    }
 
-  if (request.has_auth_request()) {
-    const auto& auth_request = request.auth_request();
-    const std::string& player_id = auth_request.player_id();
-    const std::string& token = auth_request.token();
+    if (client_msg.has_auth_request()) {
+      const auto& auth_req = client_msg.auth_request();
+      const std::string& token = auth_req.token();
+      const std::string& player_id = auth_req.player_id();
 
-    LOG_DEBUG << "Processing auth request for player_id: '" << player_id << "' with token: '" << token << "'";
+      auto& config = picoradar::common::ConfigManager::getInstance();
+      auto expectedToken = config.getString("auth.token");
+      
+      if (!expectedToken || token != expectedToken.value()) {
+        LOG_WARNING << "Authentication failed for token: " << token;
+        
+        ::picoradar::ServerToClient response;
+        auto* auth_response = response.mutable_auth_response();
+        auth_response->set_success(false);
+        auth_response->set_message("Invalid authentication token");
+        
+        std::string serialized_response;
+        response.SerializeToString(&serialized_response);
+        session->send(serialized_response);
+        return;
+      }
 
-    // *** ACTUAL AUTHENTICATION LOGIC ***
-    const std::string expectedToken = config::getConfig().getAuthToken();
-    const bool is_token_valid = (token == expectedToken);
-    LOG_DEBUG << "Server-side token check for '" << player_id << "': " << (is_token_valid ? "Valid" : "Invalid");
+      if (!player_id.empty()) {
+        LOG_INFO << fmt::format("Player {} authenticated successfully", player_id);
+        
+        session->setPlayerId(player_id);
 
-    if (is_token_valid && !player_id.empty()) {
-      // Set the player ID in the session
-      session->setPlayerId(player_id);
+        ::picoradar::PlayerData player_data;
+        player_data.set_player_id(player_id);
+        auto* position = player_data.mutable_position();
+        position->set_x(0.0);
+        position->set_y(0.0);
+        position->set_z(0.0);
+        player_data.set_timestamp(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
 
-      // Create a minimal player data for registry
-      picoradar::PlayerData player_data;
-      player_data.set_player_id(player_id);
-      player_data.set_timestamp(0);
+        registry_.updatePlayer(player_id, std::move(player_data));
 
-      // Add player to registry (using move semantics for better performance)
-      registry_.updatePlayer(player_id, std::move(player_data));
+        ::picoradar::ServerToClient response;
+        auto* auth_response = response.mutable_auth_response();
+        auth_response->set_success(true);
+        auth_response->set_message("Authentication successful");
 
-      LOG_INFO << "Player " << player_id << " authenticated successfully.";
+        std::string serialized_response;
+        response.SerializeToString(&serialized_response);
+        session->send(serialized_response);
 
-      // Send auth response
-      ServerToClient response;
-      auto* auth_response = response.mutable_auth_response();
-      auth_response->set_success(true);
-      auth_response->set_message("Authentication successful");
+        broadcastPlayerList();
+      } else {
+        LOG_WARNING << "Empty player ID in auth request";
+        
+        ::picoradar::ServerToClient response;
+        auto* auth_response = response.mutable_auth_response();
+        auth_response->set_success(false);
+        auth_response->set_message("Player ID cannot be empty");
 
-      std::string serialized_response;
-      response.SerializeToString(&serialized_response);
-      session->send(serialized_response);
+        std::string serialized_response;
+        response.SerializeToString(&serialized_response);
+        session->send(serialized_response);
+        session->close();
+      }
+    } else if (client_msg.has_player_data()) {
+      const auto& player_update = client_msg.player_data();
+      const std::string& player_id = player_update.player_id();
 
-      // Broadcast updated player list
+      if (session->getPlayerId().empty()) {
+        session->setPlayerId(player_id);
+      }
+
+      registry_.updatePlayer(player_id, player_update);
       broadcastPlayerList();
-    } else {
-      LOG_WARNING << "Authentication failed for player: '" << player_id << "'. Token Valid: " << is_token_valid << ", PlayerID Empty: " << player_id.empty();
-
-      // Send auth response with failure
-      ServerToClient response;
-      auto* auth_response = response.mutable_auth_response();
-      auth_response->set_success(false);
-      auth_response->set_message("Invalid token or player ID");
-
-      std::string serialized_response;
-      response.SerializeToString(&serialized_response);
-      session->send(serialized_response);
-
-      // Close the session
-      session->close();
     }
-  } else if (request.has_player_data()) {
-    const auto& player_data = request.player_data();
-    const std::string& player_id = player_data.player_id();
-
-    if (session->getPlayerId().empty()) {
-      session->setPlayerId(player_id);
-      LOG_INFO << "Player " << player_id << " connected and registered.";
-    }
-
-    registry_.updatePlayer(player_id, player_data);
-    broadcastPlayerList();
+  } catch (const std::exception& e) {
+    LOG_ERROR << "Error processing message: " << e.what();
   }
 }
 
 void WebsocketServer::broadcastPlayerList() {
-  ServerToClient response;
+  ::picoradar::ServerToClient response;
   auto* player_list = response.mutable_player_list();
 
-  const auto players = registry_.getAllPlayers(); // 现在返回副本，去掉引用
+  const auto players = registry_.getAllPlayers();
   for (const auto& player : players) {
     auto* player_data = player_list->add_players();
     player_data->CopyFrom(player.second);

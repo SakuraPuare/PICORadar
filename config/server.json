@@ -1,0 +1,25 @@
+{
+    "server": {
+        "port": 11451,
+        "host": "0.0.0.0",
+        "websocket_port": 11451
+    },
+    "auth": {
+        "token": "secure_production_token_change_me_2025"
+    },
+    "discovery": {
+        "udp_port": 11452,
+        "broadcast_interval_ms": 5000,
+        "request_message": "PICO_RADAR_DISCOVERY_REQUEST",
+        "response_prefix": "PICORADAR_SERVER_AT_"
+    },
+    "logging": {
+        "level": "INFO",
+        "file_enabled": true,
+        "console_enabled": true
+    },
+    "timeouts": {
+        "client_handshake_ms": 5000,
+        "connection_timeout_ms": 10000
+    }
+}

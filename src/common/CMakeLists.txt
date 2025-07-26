@@ -20,6 +20,9 @@ target_link_libraries(common_lib
     PUBLIC
     project_includes
     glog::glog
+    nlohmann_json::nlohmann_json
+    fmt::fmt
+    tl::expected
 )
 
 if (UNIX AND NOT APPLE)

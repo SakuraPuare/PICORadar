@@ -1,95 +1,112 @@
 #pragma once
 
-#include <memory>
 #include <string>
 #include <unordered_map>
 #include <mutex>
+#include <memory>
+#include <nlohmann/json.hpp>
+#include <tl/expected.hpp>
 
-namespace picoradar::config {
+namespace picoradar::common {
 
 /**
- * @brief 配置管理类
+ * @brief 配置错误类型
+ */
+struct ConfigError {
+    std::string message;
+    
+    explicit ConfigError(std::string msg) : message(std::move(msg)) {}
+};
+
+/**
+ * @brief 配置结果类型
+ */
+template<typename T>
+using ConfigResult = tl::expected<T, ConfigError>;
+
+/**
+ * @brief 现代化的配置管理器
  * 
- * 提供运行时配置管理，支持从文件和环境变量读取配置
+ * 使用 nlohmann/json 和 tl::expected 提供类型安全的配置管理
  */
 class ConfigManager {
 public:
     static ConfigManager& getInstance();
     
-    // 禁止拷贝和移动
-    ConfigManager(const ConfigManager&) = delete;
-    ConfigManager& operator=(const ConfigManager&) = delete;
-    ConfigManager(ConfigManager&&) = delete;
-    ConfigManager& operator=(ConfigManager&&) = delete;
+    // 加载配置
+    ConfigResult<void> loadFromFile(const std::string& filename);
+    ConfigResult<void> loadFromJson(const nlohmann::json& json);
     
-    /**
-     * @brief 从文件加载配置
-     * @param configPath 配置文件路径
-     * @return 是否成功加载
-     */
-    bool loadFromFile(const std::string& configPath);
+    // 类型安全的获取方法
+    template<typename T>
+    ConfigResult<T> get(const std::string& key) const;
     
-    /**
-     * @brief 从环境变量加载配置
-     */
-    void loadFromEnvironment();
+    // 便利方法
+    ConfigResult<std::string> getString(const std::string& key) const;
+    ConfigResult<int> getInt(const std::string& key) const;
+    ConfigResult<bool> getBool(const std::string& key) const;
+    ConfigResult<double> getDouble(const std::string& key) const;
     
-    /**
-     * @brief 获取字符串配置项
-     * @param key 配置键
-     * @param defaultValue 默认值
-     * @return 配置值
-     */
-    std::string getString(const std::string& key, const std::string& defaultValue = "") const;
+    // 获取配置值，如果不存在则使用提供的默认值
+    template<typename T>
+    T getWithDefault(const std::string& key, const T& default_value) const;
     
-    /**
-     * @brief 获取整数配置项
-     * @param key 配置键
-     * @param defaultValue 默认值
-     * @return 配置值
-     */
-    int getInt(const std::string& key, int defaultValue = 0) const;
+    // 专门用于端口号的方法，自动使用常量作为默认值
+    uint16_t getServicePort() const;
+    uint16_t getDiscoveryPort() const;
     
-    /**
-     * @brief 获取布尔配置项
-     * @param key 配置键
-     * @param defaultValue 默认值
-     * @return 配置值
-     */
-    bool getBool(const std::string& key, bool defaultValue = false) const;
+    // 设置值
+    template<typename T>
+    void set(const std::string& key, const T& value);
     
-    /**
-     * @brief 设置配置项
-     * @param key 配置键
-     * @param value 配置值
-     */
-    void set(const std::string& key, const std::string& value);
+    // 检查键是否存在
+    bool hasKey(const std::string& key) const;
     
-    /**
-     * @brief 获取认证令牌
-     * @return 认证令牌
-     */
-    std::string getAuthToken() const;
+    // 保存配置
+    ConfigResult<void> saveToFile(const std::string& filename) const;
     
-    /**
-     * @brief 生成新的认证令牌
-     * @return 新的认证令牌
-     */
-    std::string generateAuthToken();
+    // 获取整个配置的副本
+    nlohmann::json getConfig() const;
 
 private:
     ConfigManager() = default;
     ~ConfigManager() = default;
+    ConfigManager(const ConfigManager&) = delete;
+    ConfigManager& operator=(const ConfigManager&) = delete;
     
     mutable std::mutex mutex_;
-    std::unordered_map<std::string, std::string> config_;
+    nlohmann::json config_;
     
-    std::string generateRandomToken() const;
+    // 私有辅助方法
+    ConfigResult<nlohmann::json> getJsonValue(const std::string& key) const;
+    void loadEnvironmentVariables();
+    std::string generateSecureToken() const;
 };
 
-// 便利函数
-inline ConfigManager& getConfig() {
-    return ConfigManager::getInstance();
-}
+// 模板特化声明
+template<>
+void ConfigManager::set<std::string>(const std::string& key, const std::string& value);
 
-} // namespace picoradar::config
+template<>
+void ConfigManager::set<int>(const std::string& key, const int& value);
+
+template<>
+void ConfigManager::set<bool>(const std::string& key, const bool& value);
+
+template<>
+void ConfigManager::set<double>(const std::string& key, const double& value);
+
+// getWithDefault 模板特化声明
+template<>
+std::string ConfigManager::getWithDefault<std::string>(const std::string& key, const std::string& default_value) const;
+
+template<>
+int ConfigManager::getWithDefault<int>(const std::string& key, const int& default_value) const;
+
+template<>
+bool ConfigManager::getWithDefault<bool>(const std::string& key, const bool& default_value) const;
+
+template<>
+double ConfigManager::getWithDefault<double>(const std::string& key, const double& default_value) const;
+
+}

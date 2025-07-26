@@ -6,6 +6,9 @@
     "protobuf",
     "boost-beast",
     "boost-thread",
-    "glog"
+    "glog",
+    "nlohmann-json",
+    "tl-expected",
+    "fmt"
   ]
 }

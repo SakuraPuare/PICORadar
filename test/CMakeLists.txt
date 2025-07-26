@@ -21,6 +21,7 @@ target_link_libraries(gtest_main_obj PRIVATE
 add_subdirectory(common_tests)
 add_subdirectory(core_tests)
 add_subdirectory(client_tests)
+add_subdirectory(network_tests)
 
 if(USE_VALGRIND)
     find_program(VALGRIND_EXECUTABLE valgrind)

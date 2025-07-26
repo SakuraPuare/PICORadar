@@ -1,6 +1,7 @@
 #include "network/udp_discovery_server.hpp"
 #include "common/constants.hpp"
 #include "common/logging.hpp"
+#include "common/config_manager.hpp"
 
 namespace picoradar {
 namespace network {
@@ -9,7 +10,13 @@ UdpDiscoveryServer::UdpDiscoveryServer(net::io_context& ioc, uint16_t discovery_
     : ioc_(ioc),
       socket_(ioc),
       service_port_(service_port) {
-    server_address_response_ = config::kDiscoveryResponsePrefix + host_ip + ":" + std::to_string(service_port_);
+    auto& config = common::ConfigManager::getInstance();
+    
+    // Get response prefix from config, fallback to constant
+    std::string response_prefix = config.getString("discovery.response_prefix")
+                                    .value_or(config::kDiscoveryResponsePrefix);
+    
+    server_address_response_ = response_prefix + host_ip + ":" + std::to_string(service_port_);
     
     udp::endpoint listen_endpoint(udp::v4(), discovery_port);
     socket_.open(listen_endpoint.protocol());
@@ -51,7 +58,11 @@ void UdpDiscoveryServer::handle_receive(const boost::system::error_code& error, 
         std::string received_message(recv_buffer_.data(), bytes_transferred);
         LOG_DEBUG << "Discovery server received: '" << received_message << "' from " << remote_endpoint_.address().to_string() << ":" << remote_endpoint_.port();
 
-        if (received_message == config::kDiscoveryRequest) {
+        auto& config = common::ConfigManager::getInstance();
+        std::string expected_request = config.getString("discovery.request_message")
+                                         .value_or(config::kDiscoveryRequest);
+
+        if (received_message == expected_request) {
             LOG_INFO << "Received valid discovery request from " << remote_endpoint_.address().to_string() << ":" << remote_endpoint_.port() << ". Responding with " << server_address_response_;
             do_send(server_address_response_, remote_endpoint_);
         } else {

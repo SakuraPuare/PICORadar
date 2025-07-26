@@ -8,9 +8,7 @@
 #include <string>
 #include <thread>
 #include <utility>
-
 #include "core/player_registry.hpp"
-#include "network/udp_discovery_server.hpp"
 #include "player.pb.h"
 
 namespace beast = boost::beast;
@@ -40,8 +38,8 @@ class Session : public std::enable_shared_from_this<Session> {
   void do_read();
   void on_read(beast::error_code ec, std::size_t bytes_transferred);
   void on_accept(beast::error_code ec);
-  static void on_close(beast::error_code ec);
-  void close() { ws_.close(websocket::close_code::normal); }
+  void on_close(beast::error_code ec);
+  void close();
 
   // Method to send a message to the client
   void send(const std::string& message);
@@ -106,7 +104,6 @@ private:
     net::io_context& ioc_;
     core::PlayerRegistry& registry_;
     std::shared_ptr<Listener> listener_;
-    std::unique_ptr<UdpDiscoveryServer> discovery_server_;
     std::set<std::shared_ptr<Session>> sessions_;
     std::vector<std::thread> threads_;
     bool is_running_ = false;

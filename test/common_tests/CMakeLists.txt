@@ -14,6 +14,7 @@ target_link_libraries(common_tests_locker PRIVATE
 # 2. 编译 GTest 测试运行器
 add_executable(common_tests
     test_single_instance_guard.cpp
+    test_config_manager.cpp
     $<TARGET_OBJECTS:gtest_main_obj>
 )
 

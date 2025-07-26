@@ -1,167 +1,349 @@
 #include "config_manager.hpp"
-#include "common/logging.hpp"
-
+#include "constants.hpp"
 #include <fstream>
-#include <random>
 #include <sstream>
-#include <chrono>
 #include <cstdlib>
-#include <algorithm>
-#include <cctype>
+#include <random>
+#include <glog/logging.h>
 
-namespace picoradar::config {
+namespace picoradar::common {
 
+using json = nlohmann::json;
+
+// 静态实例
 ConfigManager& ConfigManager::getInstance() {
     static ConfigManager instance;
     return instance;
 }
 
-bool ConfigManager::loadFromFile(const std::string& configPath) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    std::ifstream file(configPath);
-    if (!file.is_open()) {
-        LOG_WARNING << "Failed to open config file: " << configPath;
-        return false;
-    }
-    
-    std::string line;
-    while (std::getline(file, line)) {
-        // 跳过空行和注释
-        if (line.empty() || line[0] == '#') {
-            continue;
+ConfigResult<void> ConfigManager::loadFromFile(const std::string& filename) {
+    try {
+        std::ifstream file(filename);
+        if (!file.is_open()) {
+            return tl::make_unexpected(ConfigError{"Failed to open config file: " + filename});
         }
         
-        // 解析 key=value 格式
-        size_t pos = line.find('=');
-        if (pos != std::string::npos) {
-            std::string key = line.substr(0, pos);
-            std::string value = line.substr(pos + 1);
-            
-            // 去除首尾空格
-            key.erase(0, key.find_first_not_of(" \t"));
-            key.erase(key.find_last_not_of(" \t") + 1);
-            value.erase(0, value.find_first_not_of(" \t"));
-            value.erase(value.find_last_not_of(" \t") + 1);
-            
-            // 去除引号
-            if (value.length() >= 2 && value[0] == '"' && value.back() == '"') {
-                value = value.substr(1, value.length() - 2);
-            }
-            
-            config_[key] = value;
-        }
-    }
-    
-    LOG_INFO << "Loaded configuration from: " << configPath;
-    return true;
-}
-
-void ConfigManager::loadFromEnvironment() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    // 定义需要从环境变量读取的配置项
-    const std::vector<std::string> envVars = {
-        "PICORADAR_AUTH_TOKEN",
-        "PICORADAR_SERVER_PORT",
-        "PICORADAR_DISCOVERY_PORT",
-        "PICORADAR_LOG_LEVEL"
-    };
-    
-    for (const auto& envVar : envVars) {
-        const char* value = std::getenv(envVar.c_str());
-        if (value != nullptr) {
-            // 转换环境变量名为配置键（移除前缀，转换为小写）
-            std::string key = envVar;
-            if (key.size() >= 10 && key.substr(0, 10) == "PICORADAR_") {
-                key = key.substr(10); // 移除 "PICORADAR_" 前缀
-            }
-            
-            // 转换为小写并替换下划线为点
-            for (char& character : key) {
-                if (character == '_') {
-                    character = '.';
-                } else {
-                    character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
-                }
-            }
-            
-            config_[key] = value;
-            LOG_DEBUG << "Loaded from environment: " << key << " = " << value;
-        }
+        json json_config;
+        file >> json_config;
+        
+        std::lock_guard<std::mutex> lock(mutex_);
+        config_ = std::move(json_config);
+        
+        LOG(INFO) << "Loaded config from: " << filename;
+        loadEnvironmentVariables();
+        
+        return {};
+    } catch (const std::exception& e) {
+        return tl::make_unexpected(ConfigError{"Failed to parse config file " + filename + ": " + e.what()});
     }
 }
 
-std::string ConfigManager::getString(const std::string& key, const std::string& defaultValue) const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    auto it = config_.find(key);
-    return (it != config_.end()) ? it->second : defaultValue;
+ConfigResult<void> ConfigManager::loadFromJson(const nlohmann::json& json) {
+    try {
+        std::lock_guard<std::mutex> lock(mutex_);
+        config_ = json;
+        loadEnvironmentVariables();
+        return {};
+    } catch (const std::exception& e) {
+        return tl::make_unexpected(ConfigError{"Failed to load JSON config: " + std::string(e.what())});
+    }
 }
 
-int ConfigManager::getInt(const std::string& key, int defaultValue) const {
-    std::string strValue = getString(key);
-    if (strValue.empty()) {
-        return defaultValue;
+ConfigResult<std::string> ConfigManager::getString(const std::string& key) const {
+    auto result = getJsonValue(key);
+    if (!result) {
+        return tl::make_unexpected(result.error());
     }
     
     try {
-        return std::stoi(strValue);
+        return result->get<std::string>();
     } catch (const std::exception& e) {
-        LOG_WARNING << "Failed to parse int config '" << key << "': " << e.what();
-        return defaultValue;
+        return tl::make_unexpected(ConfigError{"Value at key '" + key + "' is not a string: " + e.what()});
     }
 }
 
-bool ConfigManager::getBool(const std::string& key, bool defaultValue) const {
-    std::string strValue = getString(key);
-    if (strValue.empty()) {
-        return defaultValue;
+ConfigResult<int> ConfigManager::getInt(const std::string& key) const {
+    auto result = getJsonValue(key);
+    if (!result) {
+        return tl::make_unexpected(result.error());
     }
     
-    // 支持多种布尔值表示
-    std::transform(strValue.begin(), strValue.end(), strValue.begin(), 
-                   [](unsigned char c) { return std::tolower(c); });
-    return (strValue == "true" || strValue == "1" || strValue == "yes" || strValue == "on");
+    try {
+        return result->get<int>();
+    } catch (const std::exception& e) {
+        return tl::make_unexpected(ConfigError{"Value at key '" + key + "' is not an integer: " + e.what()});
+    }
 }
 
-void ConfigManager::set(const std::string& key, const std::string& value) {
+ConfigResult<bool> ConfigManager::getBool(const std::string& key) const {
+    auto result = getJsonValue(key);
+    if (!result) {
+        return tl::make_unexpected(result.error());
+    }
+    
+    try {
+        return result->get<bool>();
+    } catch (const std::exception& e) {
+        return tl::make_unexpected(ConfigError{"Value at key '" + key + "' is not a boolean: " + e.what()});
+    }
+}
+
+ConfigResult<double> ConfigManager::getDouble(const std::string& key) const {
+    auto result = getJsonValue(key);
+    if (!result) {
+        return tl::make_unexpected(result.error());
+    }
+    
+    try {
+        return result->get<double>();
+    } catch (const std::exception& e) {
+        return tl::make_unexpected(ConfigError{"Value at key '" + key + "' is not a double: " + e.what()});
+    }
+}
+
+bool ConfigManager::hasKey(const std::string& key) const {
+    auto result = getJsonValue(key);
+    return result.has_value();
+}
+
+ConfigResult<void> ConfigManager::saveToFile(const std::string& filename) const {
+    try {
+        std::ofstream file(filename);
+        if (!file.is_open()) {
+            return tl::make_unexpected(ConfigError{"Failed to open file for writing: " + filename});
+        }
+        
+        std::lock_guard<std::mutex> lock(mutex_);
+        file << config_.dump(4);
+        
+        return {};
+    } catch (const std::exception& e) {
+        return tl::make_unexpected(ConfigError{"Failed to save config to file: " + std::string(e.what())});
+    }
+}
+
+nlohmann::json ConfigManager::getConfig() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    config_[key] = value;
+    return config_;
 }
 
-std::string ConfigManager::getAuthToken() const {
-    std::string token = getString("auth.token");
-    if (token.empty()) {
-        // 如果没有配置认证令牌，返回默认的开发用令牌
-        LOG_WARNING << "No auth token configured, using default development token";
-        return "pico_radar_secret_token";
+ConfigResult<nlohmann::json> ConfigManager::getJsonValue(const std::string& key) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    // 处理点分割的键路径
+    std::vector<std::string> keys;
+    std::stringstream ss(key);
+    std::string item;
+    
+    while (std::getline(ss, item, '.')) {
+        if (!item.empty()) {
+            keys.push_back(item);
+        }
     }
+    
+    if (keys.empty()) {
+        keys.push_back(key);
+    }
+    
+    json current = config_;
+    
+    for (const auto& k : keys) {
+        if (!current.is_object() || !current.contains(k)) {
+            return tl::make_unexpected(ConfigError{"Key not found: " + key});
+        }
+        current = current[k];
+    }
+    
+    return current;
+}
+
+void ConfigManager::loadEnvironmentVariables() {
+    // 加载环境变量，例如：
+    if (const char* port = std::getenv("PICORADAR_PORT")) {
+        try {
+            set("server.port", std::stoi(port));
+        } catch (...) {
+            LOG(WARNING) << "Invalid PICORADAR_PORT value: " << port;
+        }
+    }
+    
+    if (const char* auth = std::getenv("PICORADAR_AUTH_ENABLED")) {
+        set("server.auth.enabled", std::string(auth) == "true");
+    }
+    
+    if (const char* token = std::getenv("PICORADAR_AUTH_TOKEN")) {
+        set("server.auth.token", std::string(token));
+    }
+}
+
+std::string ConfigManager::generateSecureToken() const {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 61);
+    
+    const std::string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    std::string token;
+    token.reserve(32);
+    
+    for (int i = 0; i < 32; ++i) {
+        token += chars[dis(gen)];
+    }
+    
     return token;
 }
 
-std::string ConfigManager::generateAuthToken() {
-    std::string token = generateRandomToken();
-    set("auth.token", token);
-    LOG_INFO << "Generated new auth token";
-    return token;
+// 模板特化实现
+template<>
+void ConfigManager::set<std::string>(const std::string& key, const std::string& value) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    std::vector<std::string> keys;
+    std::stringstream ss(key);
+    std::string item;
+    
+    while (std::getline(ss, item, '.')) {
+        if (!item.empty()) {
+            keys.push_back(item);
+        }
+    }
+    
+    if (keys.empty()) {
+        keys.push_back(key);
+    }
+    
+    json* current = &config_;
+    
+    for (size_t i = 0; i < keys.size() - 1; ++i) {
+        if (!current->is_object()) {
+            *current = json::object();
+        }
+        current = &(*current)[keys[i]];
+    }
+    
+    (*current)[keys.back()] = value;
 }
 
-std::string ConfigManager::generateRandomToken() const {
-    // 使用当前时间作为种子
-    auto now = std::chrono::high_resolution_clock::now();
-    auto timestamp = now.time_since_epoch().count();
+template<>
+void ConfigManager::set<int>(const std::string& key, const int& value) {
+    std::lock_guard<std::mutex> lock(mutex_);
     
-    std::mt19937_64 gen(timestamp);
-    std::uniform_int_distribution<uint64_t> dis;
+    std::vector<std::string> keys;
+    std::stringstream ss(key);
+    std::string item;
     
-    // 生成两个64位随机数并转换为十六进制字符串
-    uint64_t part1 = dis(gen);
-    uint64_t part2 = dis(gen);
+    while (std::getline(ss, item, '.')) {
+        if (!item.empty()) {
+            keys.push_back(item);
+        }
+    }
     
-    std::stringstream ss;
-    ss << std::hex << part1 << part2;
-    return ss.str();
+    if (keys.empty()) {
+        keys.push_back(key);
+    }
+    
+    json* current = &config_;
+    
+    for (size_t i = 0; i < keys.size() - 1; ++i) {
+        if (!current->is_object()) {
+            *current = json::object();
+        }
+        current = &(*current)[keys[i]];
+    }
+    
+    (*current)[keys.back()] = value;
 }
 
-} // namespace picoradar::config
+template<>
+void ConfigManager::set<bool>(const std::string& key, const bool& value) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    std::vector<std::string> keys;
+    std::stringstream ss(key);
+    std::string item;
+    
+    while (std::getline(ss, item, '.')) {
+        if (!item.empty()) {
+            keys.push_back(item);
+        }
+    }
+    
+    if (keys.empty()) {
+        keys.push_back(key);
+    }
+    
+    json* current = &config_;
+    
+    for (size_t i = 0; i < keys.size() - 1; ++i) {
+        if (!current->is_object()) {
+            *current = json::object();
+        }
+        current = &(*current)[keys[i]];
+    }
+    
+    (*current)[keys.back()] = value;
+}
+
+template<>
+void ConfigManager::set<double>(const std::string& key, const double& value) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    std::vector<std::string> keys;
+    std::stringstream ss(key);
+    std::string item;
+    
+    while (std::getline(ss, item, '.')) {
+        if (!item.empty()) {
+            keys.push_back(item);
+        }
+    }
+    
+    if (keys.empty()) {
+        keys.push_back(key);
+    }
+    
+    json* current = &config_;
+    
+    for (size_t i = 0; i < keys.size() - 1; ++i) {
+        if (!current->is_object()) {
+            *current = json::object();
+        }
+        current = &(*current)[keys[i]];
+    }
+    
+    (*current)[keys.back()] = value;
+}
+
+// 模板特化实现 - getWithDefault
+template<>
+std::string ConfigManager::getWithDefault<std::string>(const std::string& key, const std::string& default_value) const {
+    auto result = getString(key);
+    return result.has_value() ? result.value() : default_value;
+}
+
+template<>
+int ConfigManager::getWithDefault<int>(const std::string& key, const int& default_value) const {
+    auto result = getInt(key);
+    return result.has_value() ? result.value() : default_value;
+}
+
+template<>
+bool ConfigManager::getWithDefault<bool>(const std::string& key, const bool& default_value) const {
+    auto result = getBool(key);
+    return result.has_value() ? result.value() : default_value;
+}
+
+template<>
+double ConfigManager::getWithDefault<double>(const std::string& key, const double& default_value) const {
+    auto result = getDouble(key);
+    return result.has_value() ? result.value() : default_value;
+}
+
+uint16_t ConfigManager::getServicePort() const {
+    return static_cast<uint16_t>(getWithDefault("server.port", static_cast<int>(picoradar::config::kDefaultServicePort)));
+}
+
+uint16_t ConfigManager::getDiscoveryPort() const {
+    return static_cast<uint16_t>(getWithDefault("discovery.udp_port", static_cast<int>(picoradar::config::kDefaultDiscoveryPort)));
+}
+
+} // namespace picoradar::common
