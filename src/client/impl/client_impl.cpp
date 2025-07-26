@@ -1,0 +1,422 @@
+#include "client_impl.hpp"
+#include "common/logging.hpp"
+#include "client.pb.h"
+#include "server.pb.h"
+
+#include <sstream>
+
+namespace picoradar::client {
+
+Client::Impl::Impl() 
+    : ioc_(std::make_unique<net::io_context>())
+    , resolver_(std::make_unique<tcp::resolver>(*ioc_))
+    , state_(ClientState::Disconnected)
+    , write_in_progress_(false) {
+    
+    LOG_DEBUG << "Client::Impl created";
+}
+
+Client::Impl::~Impl() {
+    LOG_DEBUG << "Client::Impl destroying";
+    disconnect();
+}
+
+void Client::Impl::setOnPlayerListUpdate(Client::PlayerListCallback callback) {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    player_list_callback_ = std::move(callback);
+    LOG_DEBUG << "Player list callback set";
+}
+
+std::future<void> Client::Impl::connect(const std::string& server_address,
+                                        const std::string& player_id,
+                                        const std::string& token) {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    
+    if (get_state() != ClientState::Disconnected) {
+        auto promise = std::promise<void>();
+        auto future = promise.get_future();
+        promise.set_exception(std::make_exception_ptr(
+            std::runtime_error("Client is not in disconnected state. Call disconnect() first.")));
+        return future;
+    }
+
+    // 重置连接状态
+    connect_promise_ = std::promise<void>();
+    auto future = connect_promise_.get_future();
+    
+    player_id_ = player_id;
+    token_ = token;
+    
+    // 解析服务器地址
+    auto [host, port] = parse_address(server_address);
+    
+    // 创建新的 WebSocket 流
+    ws_ = std::make_unique<websocket::stream<beast::tcp_stream>>(*ioc_);
+    
+    // 设置 WebSocket 选项
+    ws_->set_option(websocket::stream_base::timeout::suggested(
+        beast::role_type::client));
+    
+    ws_->set_option(websocket::stream_base::decorator(
+        [](websocket::request_type& req) {
+            req.set(beast::http::field::user_agent, "PICORadar-Client/1.0");
+        }));
+
+    set_state(ClientState::Connecting);
+    
+    // 启动网络线程
+    if (!network_thread_.joinable()) {
+        network_thread_ = std::thread(&Client::Impl::run_network_thread, this);
+    }
+    
+    // 开始异步解析
+    resolver_->async_resolve(
+        host, port,
+        [this](beast::error_code ec, tcp::resolver::results_type results) {
+            handle_resolve(ec, results);
+        });
+    
+    LOG_INFO << "Starting connection to " << server_address;
+    return future;
+}
+
+void Client::Impl::disconnect() {
+    LOG_INFO << "Disconnecting client";
+    
+    set_state(ClientState::Disconnecting);
+    
+    if (ioc_) {
+        // 在 io_context 中执行关闭操作
+        net::post(*ioc_, [this]() {
+            close_connection();
+        });
+        
+        // 停止 io_context
+        ioc_->stop();
+    }
+    
+    // 等待网络线程退出
+    if (network_thread_.joinable()) {
+        network_thread_.join();
+        LOG_DEBUG << "Network thread joined";
+    }
+    
+    // 重置状态
+    set_state(ClientState::Disconnected);
+    
+    // 清理资源
+    ws_.reset();
+    if (ioc_) {
+        ioc_->restart();
+    }
+    
+    LOG_INFO << "Client disconnected";
+}
+
+void Client::Impl::sendPlayerData(const PlayerData& data) {
+    if (get_state() != ClientState::Connected) {
+        // 静默忽略，如需求文档所述
+        return;
+    }
+    
+    // 创建客户端消息
+    ClientToServer client_msg;
+    *client_msg.mutable_player_data() = data;
+    
+    // 序列化
+    std::string serialized;
+    if (!client_msg.SerializeToString(&serialized)) {
+        LOG_ERROR << "Failed to serialize PlayerData";
+        return;
+    }
+    
+    // 添加到写队列
+    {
+        std::lock_guard<std::mutex> lock(write_queue_mutex_);
+        write_queue_.push(std::move(serialized));
+    }
+    
+    // 触发写操作
+    if (ioc_) {
+        net::post(*ioc_, [this]() {
+            do_write();
+        });
+    }
+}
+
+bool Client::Impl::isConnected() const {
+    return get_state() == ClientState::Connected;
+}
+
+void Client::Impl::run_network_thread() {
+    LOG_DEBUG << "Network thread started";
+    
+    try {
+        ioc_->run();
+    } catch (const std::exception& e) {
+        LOG_ERROR << "Exception in network thread: " << e.what();
+        
+        // 如果连接过程中出现异常，设置 promise
+        try {
+            connect_promise_.set_exception(std::current_exception());
+        } catch (...) {
+            // Promise 可能已经被设置
+        }
+    }
+    
+    LOG_DEBUG << "Network thread finished";
+}
+
+void Client::Impl::handle_resolve(beast::error_code ec, tcp::resolver::results_type results) {
+    if (ec) {
+        LOG_ERROR << "Resolve failed: " << ec.message();
+        connect_promise_.set_exception(std::make_exception_ptr(
+            std::runtime_error("DNS resolution failed: " + ec.message())));
+        return;
+    }
+    
+    LOG_DEBUG << "DNS resolution successful";
+    
+    // 开始连接
+    beast::get_lowest_layer(*ws_).expires_after(std::chrono::seconds(30));
+    beast::get_lowest_layer(*ws_).async_connect(
+        results,
+        [this](beast::error_code ec, tcp::resolver::results_type::endpoint_type endpoint) {
+            handle_connect(ec, endpoint);
+        });
+}
+
+void Client::Impl::handle_connect(beast::error_code ec, tcp::resolver::results_type::endpoint_type endpoint) {
+    if (ec) {
+        LOG_ERROR << "TCP connect failed: " << ec.message();
+        connect_promise_.set_exception(std::make_exception_ptr(
+            std::runtime_error("TCP connection failed: " + ec.message())));
+        return;
+    }
+    
+    LOG_DEBUG << "TCP connection established to " << endpoint;
+    
+    // 关闭超时
+    beast::get_lowest_layer(*ws_).expires_never();
+    
+    // 设置超时
+    ws_->next_layer().expires_after(std::chrono::seconds(30));
+    
+    // 进行 WebSocket 握手
+    ws_->async_handshake(
+        endpoint.address().to_string() + ":" + std::to_string(endpoint.port()),
+        "/",
+        [this](beast::error_code ec) {
+            handle_handshake(ec);
+        });
+}
+
+void Client::Impl::handle_handshake(beast::error_code ec) {
+    if (ec) {
+        LOG_ERROR << "WebSocket handshake failed: " << ec.message();
+        connect_promise_.set_exception(std::make_exception_ptr(
+            std::runtime_error("WebSocket handshake failed: " + ec.message())));
+        return;
+    }
+    
+    LOG_DEBUG << "WebSocket handshake successful";
+    
+    // 关闭超时
+    ws_->next_layer().expires_never();
+    
+    // 发送认证请求
+    send_auth_request();
+    
+    // 开始读取消息
+    start_read();
+}
+
+void Client::Impl::send_auth_request() {
+    LOG_DEBUG << "Sending authentication request";
+    
+    // 创建认证请求
+    ClientToServer client_msg;
+    auto* auth_req = client_msg.mutable_auth_request();
+    auth_req->set_player_id(player_id_);
+    auth_req->set_token(token_);
+    
+    // 序列化
+    std::string serialized;
+    if (!client_msg.SerializeToString(&serialized)) {
+        LOG_ERROR << "Failed to serialize auth request";
+        connect_promise_.set_exception(std::make_exception_ptr(
+            std::runtime_error("Failed to serialize authentication request")));
+        return;
+    }
+    
+    // 发送
+    ws_->async_write(
+        net::buffer(serialized),
+        [this](beast::error_code ec, std::size_t bytes_transferred) {
+            handle_auth_write(ec, bytes_transferred);
+        });
+}
+
+void Client::Impl::handle_auth_write(beast::error_code ec, std::size_t bytes_transferred) {
+    if (ec) {
+        LOG_ERROR << "Auth write failed: " << ec.message();
+        connect_promise_.set_exception(std::make_exception_ptr(
+            std::runtime_error("Failed to send authentication request: " + ec.message())));
+        return;
+    }
+    
+    LOG_DEBUG << "Authentication request sent (" << bytes_transferred << " bytes)";
+}
+
+void Client::Impl::start_read() {
+    ws_->async_read(
+        read_buffer_,
+        [this](beast::error_code ec, std::size_t bytes_transferred) {
+            handle_read(ec, bytes_transferred);
+        });
+}
+
+void Client::Impl::handle_read(beast::error_code ec, std::size_t bytes_transferred) {
+    if (ec) {
+        if (ec == websocket::error::closed) {
+            LOG_INFO << "WebSocket connection closed by server";
+        } else {
+            LOG_ERROR << "Read failed: " << ec.message();
+        }
+        
+        // 如果还在连接过程中，设置异常
+        if (get_state() == ClientState::Connecting) {
+            connect_promise_.set_exception(std::make_exception_ptr(
+                std::runtime_error("Connection lost during handshake: " + ec.message())));
+        }
+        
+        return;
+    }
+    
+    // 处理收到的消息
+    std::string message = beast::buffers_to_string(read_buffer_.data());
+    read_buffer_.consume(bytes_transferred);
+    
+    LOG_DEBUG << "Received message (" << bytes_transferred << " bytes)";
+    
+    process_server_message(message);
+    
+    // 继续读取
+    if (get_state() != ClientState::Disconnecting) {
+        start_read();
+    }
+}
+
+void Client::Impl::process_server_message(const std::string& message) {
+    ServerToClient server_msg;
+    if (!server_msg.ParseFromString(message)) {
+        LOG_ERROR << "Failed to parse server message";
+        return;
+    }
+    
+    if (server_msg.has_auth_response()) {
+        const auto& auth_resp = server_msg.auth_response();
+        LOG_DEBUG << "Received auth response: success=" << auth_resp.success() 
+                  << ", message=" << auth_resp.message();
+        
+        if (auth_resp.success()) {
+            set_state(ClientState::Connected);
+            connect_promise_.set_value();
+            LOG_INFO << "Authentication successful";
+        } else {
+            connect_promise_.set_exception(std::make_exception_ptr(
+                std::runtime_error("Authentication failed: " + auth_resp.message())));
+        }
+    } else if (server_msg.has_player_list()) {
+        if (get_state() == ClientState::Connected && player_list_callback_) {
+            const auto& player_list = server_msg.player_list();
+            std::vector<PlayerData> players(player_list.players().begin(), 
+                                          player_list.players().end());
+            
+            LOG_DEBUG << "Received player list with " << players.size() << " players";
+            
+            try {
+                player_list_callback_(players);
+            } catch (const std::exception& e) {
+                LOG_ERROR << "Exception in player list callback: " << e.what();
+            }
+        }
+    }
+}
+
+void Client::Impl::do_write() {
+    std::lock_guard<std::mutex> lock(write_queue_mutex_);
+    
+    if (write_in_progress_ || write_queue_.empty() || get_state() != ClientState::Connected) {
+        return;
+    }
+    
+    write_in_progress_ = true;
+    std::string message = std::move(write_queue_.front());
+    write_queue_.pop();
+    
+    // 释放锁后进行写操作
+    lock.~lock_guard();
+    
+    ws_->async_write(
+        net::buffer(message),
+        [this](beast::error_code ec, std::size_t bytes_transferred) {
+            handle_write(ec, bytes_transferred);
+        });
+}
+
+void Client::Impl::handle_write(beast::error_code ec, std::size_t bytes_transferred) {
+    {
+        std::lock_guard<std::mutex> lock(write_queue_mutex_);
+        write_in_progress_ = false;
+    }
+    
+    if (ec) {
+        LOG_ERROR << "Write failed: " << ec.message();
+        return;
+    }
+    
+    LOG_DEBUG << "Message sent (" << bytes_transferred << " bytes)";
+    
+    // 继续处理队列中的消息
+    do_write();
+}
+
+void Client::Impl::close_connection() {
+    if (ws_ && ws_->is_open()) {
+        LOG_DEBUG << "Closing WebSocket connection";
+        
+        beast::error_code ec;
+        ws_->close(websocket::close_code::normal, ec);
+        
+        if (ec) {
+            LOG_ERROR << "Error closing WebSocket: " << ec.message();
+        }
+    }
+}
+
+void Client::Impl::set_state(ClientState new_state) {
+    state_.store(new_state);
+}
+
+ClientState Client::Impl::get_state() const {
+    return state_.load();
+}
+
+std::pair<std::string, std::string> Client::Impl::parse_address(const std::string& address) {
+    auto colon_pos = address.find_last_of(':');
+    if (colon_pos == std::string::npos) {
+        throw std::invalid_argument("Invalid server address format. Expected 'host:port'");
+    }
+    
+    std::string host = address.substr(0, colon_pos);
+    std::string port = address.substr(colon_pos + 1);
+    
+    if (host.empty() || port.empty()) {
+        throw std::invalid_argument("Invalid server address format. Host and port cannot be empty");
+    }
+    
+    return {host, port};
+}
+
+} // namespace picoradar::client
