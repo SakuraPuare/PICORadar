@@ -9,6 +9,7 @@
     "glog",
     "nlohmann-json",
     "tl-expected",
-    "fmt"
+    "fmt",
+    "ftxui"
   ]
 }

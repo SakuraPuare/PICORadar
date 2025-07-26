@@ -6,6 +6,8 @@ add_library(server_lib STATIC)
 target_sources(server_lib
     PRIVATE
     server.cpp
+    cli_interface.cpp
+    cli_log_adapter.cpp
 )
 
 target_include_directories(server_lib
@@ -20,6 +22,9 @@ target_link_libraries(server_lib
     core_lib
     common_lib
     proto_gen
+    ftxui::screen
+    ftxui::dom
+    ftxui::component
 )
 
 # Create the executable that uses the library

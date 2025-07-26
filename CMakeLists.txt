@@ -78,6 +78,7 @@ find_package(Boost CONFIG REQUIRED COMPONENTS system thread beast) # Beast是头
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(tl-expected CONFIG REQUIRED)
+find_package(ftxui CONFIG REQUIRED)
 
 # ==============================================================================
 # Central Include Directories Management
