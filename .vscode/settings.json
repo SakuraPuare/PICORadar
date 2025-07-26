@@ -14,6 +14,12 @@
         "functional": "cpp",
         "tuple": "cpp",
         "utility": "cpp",
-        "bitset": "cpp"
+        "bitset": "cpp",
+        "charconv": "cpp",
+        "chrono": "cpp",
+        "ranges": "cpp",
+        "ratio": "cpp",
+        "system_error": "cpp",
+        "type_traits": "cpp"
     }
 }

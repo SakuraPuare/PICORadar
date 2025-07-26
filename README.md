@@ -53,7 +53,7 @@
 
 ```bash
 # 1. 克隆仓库 (确保使用 --recursive 拉取子模块)
-git clone --recursive https://github.com/YourUsername/PicoRadar.git
+git clone --recursive https://github.com/SakuraPuare/PicoRadar.git
 cd PicoRadar
 
 # 2. 配置CMake (vcpkg将自动安装所有依赖)

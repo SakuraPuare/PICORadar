@@ -199,15 +199,23 @@ TEST_F(ClientIntegrationTest, MultipleClients) {
     const int num_clients = 3;
     std::vector<std::unique_ptr<Client>> clients;
     std::vector<std::future<void>> futures;
+
+    // 为每个客户端存储接收到的玩家数据
+    std::vector<std::map<std::string, PlayerData>> received_data_maps(num_clients);
+    std::vector<std::mutex> map_mutexes(num_clients);
     
     // 创建多个客户端
     for (int i = 0; i < num_clients; ++i) {
         auto client = std::make_unique<Client>();
         
-        // 为每个客户端设置回调
-        client->setOnPlayerListUpdate([i](const std::vector<PlayerData>& players) {
+        // 为每个客户端设置回调以存储数据
+        client->setOnPlayerListUpdate([&, i](const std::vector<PlayerData>& players) {
+            std::lock_guard<std::mutex> lock(map_mutexes[i]);
             LOG_DEBUG << "Client " << i << " received player list with " 
                       << players.size() << " players";
+            for (const auto& player : players) {
+                received_data_maps[i][player.player_id()] = player;
+            }
         });
         
         // 开始连接
@@ -264,6 +272,31 @@ TEST_F(ClientIntegrationTest, MultipleClients) {
     
     // 验证服务器上的玩家数量
     EXPECT_EQ(server_->getPlayerCount(), num_clients);
+
+    // 验证每个客户端收到的数据是否正确
+    for (int i = 0; i < num_clients; ++i) { // 遍历每个客户端
+        std::lock_guard<std::mutex> lock(map_mutexes[i]);
+        const auto& received_map = received_data_maps[i];
+
+        // 客户端应该收到所有玩家（包括自己）的数据
+        ASSERT_EQ(received_map.size(), num_clients)
+            << "Client " << i << " expected to receive data for " << num_clients
+            << " players, but got " << received_map.size();
+
+        for (int j = 0; j < num_clients; ++j) { // 验证来自每个发送者的数据
+            std::string expected_player_id = "test_player_" + std::to_string(j);
+            auto it = received_map.find(expected_player_id);
+
+            ASSERT_NE(it, received_map.end())
+                << "Client " << i << " did not receive data for player " << expected_player_id;
+
+            const auto& data = it->second;
+            EXPECT_EQ(data.scene_id(), "test_scene");
+            EXPECT_FLOAT_EQ(data.position().x(), static_cast<float>(j));
+            EXPECT_FLOAT_EQ(data.position().y(), static_cast<float>(j * 2));
+            EXPECT_FLOAT_EQ(data.position().z(), static_cast<float>(j * 3));
+        }
+    }
     
     // 断开所有连接
     for (auto& client : clients) {

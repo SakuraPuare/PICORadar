@@ -136,6 +136,9 @@ if(PICORADAR_BUILD_TESTS)
   add_subdirectory(test)
 endif()
 
+# Add benchmark subdirectory
+add_subdirectory(benchmark)
+
 # ==============================================================================
 # 输出构建信息
 # ==============================================================================
