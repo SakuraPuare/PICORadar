@@ -97,7 +97,8 @@
         "binaryDir": "${sourceDir}/build/windows",
         "cacheVariables": {
           "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
-          "VCPKG_TARGET_TRIPLET": "x64-windows",
+          "VCPKG_TARGET_TRIPLET": "x64-windows-mingw",
+          "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
           "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/mingw-w64.cmake",
           "CMAKE_BUILD_TYPE": "Release",
           "PICORADAR_BUILD_TESTS": "OFF",

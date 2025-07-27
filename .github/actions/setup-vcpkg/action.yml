@@ -47,7 +47,12 @@ runs:
     - name: Install vcpkg dependencies with binary caching (Linux)
       if: inputs.os == 'Linux'
       run: |
-        ./vcpkg/vcpkg install --triplet ${{ inputs.triplet }} --binarysource=clear --binarysource=files,$HOME/.cache/vcpkg/archives,readwrite
+        # Add custom triplet directory
+        TRIPLET_ARG=""
+        if [ -d "./cmake/triplets" ]; then
+          TRIPLET_ARG="--overlay-triplets=./cmake/triplets"
+        fi
+        ./vcpkg/vcpkg install --triplet ${{ inputs.triplet }} $TRIPLET_ARG --binarysource=clear --binarysource=files,$HOME/.cache/vcpkg/archives,readwrite
       shell: bash
 
     # 使用 manifest 模式和二进制缓存 (Windows)
