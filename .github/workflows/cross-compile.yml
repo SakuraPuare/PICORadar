@@ -39,14 +39,23 @@ jobs:
             g++-mingw-w64-x86-64 \
             wine64
 
+      - name: Setup comprehensive caching
+        uses: ./.github/actions/setup-cache
+        with:
+          os: Linux
+          triplet: ${{ matrix.target.triplet }}
+          compiler: gcc-11
+
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          os: Linux
+
       - name: Setup vcpkg
-        run: |
-          git clone https://github.com/Microsoft/vcpkg.git vcpkg
-          ./vcpkg/bootstrap-vcpkg.sh
-          
-      - name: Install dependencies
-        run: |
-          ./vcpkg/vcpkg install --triplet ${{ matrix.target.triplet }}
+        uses: ./.github/actions/setup-vcpkg
+        with:
+          triplet: ${{ matrix.target.triplet }}
+          os: Linux
 
       - name: Configure CMake
         run: |

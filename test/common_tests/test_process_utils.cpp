@@ -45,11 +45,14 @@ class ProcessUtilsTest : public ::testing::Test {
     script << "fi\n";
     script.close();
 
-    // 使脚本可执行
+    // 使脚本可执行 - 使用更兼容的权限设置
     std::filesystem::permissions(test_script_path_,
-                                 std::filesystem::perms::owner_exec |
-                                     std::filesystem::perms::owner_read |
-                                     std::filesystem::perms::owner_write);
+                                 std::filesystem::perms::owner_all |
+                                     std::filesystem::perms::group_read |
+                                     std::filesystem::perms::group_exec |
+                                     std::filesystem::perms::others_read |
+                                     std::filesystem::perms::others_exec,
+                                 std::filesystem::perm_options::replace);
   }
 
   std::filesystem::path temp_dir_;

@@ -35,6 +35,7 @@ if(WIN32)
         add_compile_options(
             /bigobj                 # 支持大型对象文件
             /utf-8                  # 使用 UTF-8 编码
+            /EHsc                   # 启用 C++ 异常处理
         )
     endif()
 endif()
@@ -136,7 +137,6 @@ add_library(proto_gen STATIC
 protobuf_generate(
     TARGET proto_gen
     IMPORT_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/proto"
-    NO_SHADOW
 )
 
 # 3. 将 protobuf 运行时库链接到我们的生成库

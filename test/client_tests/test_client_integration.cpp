@@ -19,7 +19,7 @@ class ClientIntegrationTest : public ::testing::Test {
 protected:
     static void SetUpTestSuite() {
         // 创建logs目录
-        std::filesystem::create_directories("./logs");
+        std::filesystem::create_directories(std::filesystem::path("./logs"));
         
         // 初始化日志系统，允许失败
         try {
@@ -270,8 +270,8 @@ TEST_F(ClientIntegrationTest, MultipleClients) {
         EXPECT_TRUE(client->isConnected());
     }
     
-    // 等待服务器处理所有连接和认证
-    std::this_thread::sleep_for(std::chrono::milliseconds(800));
+    // 等待服务器处理所有连接和认证 - 增加等待时间处理时序问题
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     
     // 验证服务器上的玩家数量 - 使用重试机制处理时序问题
     size_t player_count = 0;

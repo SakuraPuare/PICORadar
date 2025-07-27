@@ -5,6 +5,10 @@
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
     #endif
+    // Prevent Windows from defining ERROR macro that conflicts with logging
+    #ifdef ERROR
+        #undef ERROR
+    #endif
 #endif
 
 #include <csignal>
