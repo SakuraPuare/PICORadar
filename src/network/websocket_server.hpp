@@ -70,10 +70,33 @@ class Listener : public std::enable_shared_from_this<Listener> {
            WebsocketServer& server)
       : ioc_(ioc), acceptor_(ioc), socket_(ioc), server_(server) {
     beast::error_code ec;
+
+    // Open the acceptor
     acceptor_.open(endpoint.protocol(), ec);
+    if (ec) {
+      throw std::runtime_error("Failed to open acceptor: " + ec.message());
+    }
+
+    // Set SO_REUSEADDR option
     acceptor_.set_option(net::socket_base::reuse_address(true), ec);
+    if (ec) {
+      throw std::runtime_error("Failed to set reuse_address option: " +
+                               ec.message());
+    }
+
+    // Bind to the endpoint
     acceptor_.bind(endpoint, ec);
+    if (ec) {
+      throw std::runtime_error(
+          "Failed to bind to " + endpoint.address().to_string() + ":" +
+          std::to_string(endpoint.port()) + ": " + ec.message());
+    }
+
+    // Start listening
     acceptor_.listen(net::socket_base::max_listen_connections, ec);
+    if (ec) {
+      throw std::runtime_error("Failed to listen: " + ec.message());
+    }
   }
 
   void run() { do_accept(); }
@@ -104,6 +127,13 @@ class WebsocketServer {
                       const std::string& message);
   void broadcastPlayerList();
 
+  // Statistics methods
+  [[nodiscard]] auto getConnectionCount() const -> size_t;
+  [[nodiscard]] auto getMessagesReceived() const -> size_t;
+  [[nodiscard]] auto getMessagesSent() const -> size_t;
+  void incrementMessagesSent();
+  void incrementMessagesReceived();
+
  private:
   net::io_context& ioc_;
   core::PlayerRegistry& registry_;
@@ -111,6 +141,11 @@ class WebsocketServer {
   std::set<std::shared_ptr<Session>> sessions_;
   std::vector<std::thread> threads_;
   bool is_running_ = false;
+
+  // Statistics
+  mutable std::mutex stats_mutex_;
+  std::atomic<size_t> messages_received_{0};
+  std::atomic<size_t> messages_sent_{0};
 };
 
 }  // namespace picoradar::network

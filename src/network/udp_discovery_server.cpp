@@ -1,5 +1,7 @@
 #include "network/udp_discovery_server.hpp"
 
+#include <boost/system/system_error.hpp>
+
 #include "common/config_manager.hpp"
 #include "common/constants.hpp"
 #include "common/logging.hpp"
@@ -15,17 +17,39 @@ UdpDiscoveryServer::UdpDiscoveryServer(net::io_context& ioc,
   const auto& config = common::ConfigManager::getInstance();
 
   // Get response prefix from config, fallback to constant
-  std::string response_prefix = config.getString("discovery.response_prefix")
-                                    .value_or(config::kDiscoveryResponsePrefix);
+  std::string response_prefix =
+      config.getString("discovery.response_prefix")
+          .value_or(picoradar::constants::kDiscoveryResponsePrefix);
 
   server_address_response_ =
       response_prefix + host_ip + ":" + std::to_string(service_port_);
 
-  const udp::endpoint listen_endpoint(udp::v4(), discovery_port);
-  socket_.open(listen_endpoint.protocol());
-  socket_.set_option(net::socket_base::reuse_address(true));
-  socket_.set_option(net::socket_base::broadcast(true));
-  socket_.bind(listen_endpoint);
+  // First, check if port is available by trying to bind without SO_REUSEADDR
+  try {
+    udp::socket test_socket(ioc);
+    const udp::endpoint test_endpoint(udp::v4(), discovery_port);
+    test_socket.open(test_endpoint.protocol());
+    test_socket.bind(test_endpoint);
+    test_socket.close();
+  } catch (const boost::system::system_error& e) {
+    LOG_ERROR << "Port " << discovery_port
+              << " is already in use: " << e.what();
+    throw PortInUseException("Port " + std::to_string(discovery_port) +
+                             " is already in use: " + std::string(e.what()));
+  }
+
+  try {
+    const udp::endpoint listen_endpoint(udp::v4(), discovery_port);
+    socket_.open(listen_endpoint.protocol());
+    socket_.set_option(net::socket_base::reuse_address(true));
+    socket_.set_option(net::socket_base::broadcast(true));
+    socket_.bind(listen_endpoint);
+  } catch (const boost::system::system_error& e) {
+    LOG_ERROR << "Failed to bind discovery server to port " << discovery_port
+              << ": " << e.what();
+    throw PortInUseException("Failed to bind discovery server: " +
+                             std::string(e.what()));
+  }
 }
 
 UdpDiscoveryServer::~UdpDiscoveryServer() { stop(); }
@@ -66,7 +90,7 @@ void UdpDiscoveryServer::handle_receive(const boost::system::error_code& error,
     const auto& config = common::ConfigManager::getInstance();
     const std::string expected_request =
         config.getString("discovery.request_message")
-            .value_or(config::kDiscoveryRequest);
+            .value_or(picoradar::constants::kDiscoveryRequest);
 
     if (received_message == expected_request) {
       LOG_INFO << "Received valid discovery request from "

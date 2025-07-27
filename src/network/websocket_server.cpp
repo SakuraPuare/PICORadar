@@ -106,6 +106,8 @@ void Session::on_read(beast::error_code ec, std::size_t bytes_transferred) {
 }
 
 void Session::send(const std::string& message) {
+  server_.incrementMessagesSent();  // Increment sent message counter
+
   net::post(strand_, [self = shared_from_this(), message] {
     self->write_queue_.push(message);
     if (self->write_queue_.size() == 1) {
@@ -169,20 +171,31 @@ void WebsocketServer::start(const std::string& address, uint16_t port,
                             int thread_count) {
   if (is_running_) {
     LOG_WARNING << "WebSocket server is already running";
-    return;
+    throw std::runtime_error("WebSocket server is already running");
+  }
+
+  // Validate thread count
+  if (thread_count <= 0) {
+    throw std::invalid_argument("Thread count must be positive");
   }
 
   auto server_address = net::ip::make_address(address);
+
+  // Try to create and bind the listener first to detect port conflicts
+  try {
+    listener_ = std::make_shared<Listener>(
+        ioc_, tcp::endpoint{server_address, port}, *this);
+    listener_->run();
+  } catch (const std::exception& e) {
+    throw std::runtime_error(
+        fmt::format("Failed to start WebSocket server on {}:{}: {}", address,
+                    port, e.what()));
+  }
 
   threads_.reserve(thread_count);
   for (int i = 0; i < thread_count; ++i) {
     threads_.emplace_back([this] { ioc_.run(); });
   }
-
-  listener_ = std::make_shared<Listener>(
-      ioc_, tcp::endpoint{server_address, port}, *this);
-
-  listener_->run();
 
   is_running_ = true;
   LOG_INFO << fmt::format("WebSocket server started on {}:{}", address, port);
@@ -234,6 +247,8 @@ void WebsocketServer::onSessionClosed(const std::shared_ptr<Session>& session) {
 
 void WebsocketServer::processMessage(const std::shared_ptr<Session>& session,
                                      const std::string& raw_message) {
+  ++messages_received_;  // Increment received message counter
+
   try {
     picoradar::ClientToServer client_msg;
     if (!client_msg.ParseFromString(raw_message)) {
@@ -249,8 +264,17 @@ void WebsocketServer::processMessage(const std::shared_ptr<Session>& session,
       auto& config = picoradar::common::ConfigManager::getInstance();
       auto expectedToken = config.getString("auth.token");
 
+      LOG_DEBUG << "Authentication attempt - Player: " << player_id
+                << ", Received token: " << token << ", Expected token exists: "
+                << (expectedToken ? "yes" : "no");
+
+      if (expectedToken) {
+        LOG_DEBUG << "Expected token: " << expectedToken.value();
+      }
+
       if (!expectedToken || token != expectedToken.value()) {
-        LOG_WARNING << "Authentication failed for token: " << token;
+        LOG_WARNING << "Authentication failed for player '" << player_id
+                    << "' with token: " << token;
 
         picoradar::ServerToClient response;
         auto* auth_response = response.mutable_auth_response();
@@ -354,5 +378,22 @@ std::string Session::getSafeEndpoint() const {
   }
   return "disconnected";
 }
+
+auto WebsocketServer::getConnectionCount() const -> size_t {
+  std::lock_guard<std::mutex> lock(stats_mutex_);
+  return sessions_.size();
+}
+
+auto WebsocketServer::getMessagesReceived() const -> size_t {
+  return messages_received_.load();
+}
+
+auto WebsocketServer::getMessagesSent() const -> size_t {
+  return messages_sent_.load();
+}
+
+void WebsocketServer::incrementMessagesSent() { ++messages_sent_; }
+
+void WebsocketServer::incrementMessagesReceived() { ++messages_received_; }
 
 }  // namespace picoradar::network

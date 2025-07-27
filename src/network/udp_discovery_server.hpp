@@ -10,6 +10,12 @@ namespace picoradar::network {
 namespace net = boost::asio;
 using udp = net::ip::udp;
 
+class PortInUseException : public std::runtime_error {
+ public:
+  explicit PortInUseException(const std::string& message)
+      : std::runtime_error(message) {}
+};
+
 class UdpDiscoveryServer {
  public:
   UdpDiscoveryServer(net::io_context& ioc, uint16_t discovery_port,
