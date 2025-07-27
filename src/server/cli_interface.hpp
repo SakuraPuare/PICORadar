@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 
+#include "common/logging.hpp"  // 为了继承 logger::CLIOutput
 #include "ftxui/component/captured_mouse.hpp"
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/component_base.hpp"
@@ -26,7 +27,7 @@ namespace picoradar::server {
  * - 命令输入区域
  * - 统计信息显示区域
  */
-class CLIInterface {
+class CLIInterface : public logger::CLIOutput {
  public:
   explicit CLIInterface();
   ~CLIInterface();
@@ -37,8 +38,9 @@ class CLIInterface {
   // 停止界面
   void stop();
 
-  // 添加日志条目
-  void addLogEntry(const std::string& level, const std::string& message);
+  // 添加日志条目 (实现 logger::CLIOutput 接口)
+  void addLogEntry(const std::string& level,
+                   const std::string& message) override;
 
   // 更新服务器状态
   void updateServerStatus(const std::string& status);

@@ -27,12 +27,17 @@ void CLIInterface::start() {
 
     auto ui = createUI();
 
-    // 定期刷新界面
+    // 定期刷新界面并检查停止信号
     auto refresh_timer = std::thread([this, &screen] {
       while (running_) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         if (needs_refresh_.exchange(false)) {
           screen.PostEvent(Event::Custom);
+        }
+        // 检查是否需要退出
+        if (!running_) {
+          screen.Exit();
+          break;
         }
       }
     });

@@ -48,4 +48,16 @@ auto Server::getPlayerCount() const -> size_t {
   return registry_->getPlayerCount();
 }
 
+auto Server::getConnectionCount() const -> size_t {
+  return ws_server_ ? ws_server_->getConnectionCount() : 0;
+}
+
+auto Server::getMessagesReceived() const -> size_t {
+  return ws_server_ ? ws_server_->getMessagesReceived() : 0;
+}
+
+auto Server::getMessagesSent() const -> size_t {
+  return ws_server_ ? ws_server_->getMessagesSent() : 0;
+}
+
 }  // namespace picoradar::server

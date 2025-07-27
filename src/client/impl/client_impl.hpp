@@ -21,7 +21,7 @@ namespace picoradar::client {
 /**
  * @brief 客户端状态枚举
  */
-enum class ClientState {
+enum class ClientState : std::uint8_t {
   Disconnected,  ///< 未连接
   Connecting,    ///< 正在连接
   Connected,     ///< 已连接并认证成功

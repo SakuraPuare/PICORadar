@@ -29,6 +29,11 @@ class Server {
   // Method to get player count for testing
   [[nodiscard]] auto getPlayerCount() const -> size_t;
 
+  // Statistics methods
+  [[nodiscard]] auto getConnectionCount() const -> size_t;
+  [[nodiscard]] auto getMessagesReceived() const -> size_t;
+  [[nodiscard]] auto getMessagesSent() const -> size_t;
+
  private:
   std::unique_ptr<net::io_context> ioc_;
   std::shared_ptr<core::PlayerRegistry> registry_;

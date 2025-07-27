@@ -1,56 +1,38 @@
 #include "cli_log_adapter.hpp"
 
-#include <sstream>
-
 #include "cli_interface.hpp"
+#include "common/config_manager.hpp"
 #include "common/logging.hpp"
-#include "common/platform_fixes.hpp"
 
 namespace picoradar::server {
 
-std::shared_ptr<CLIInterface> CLILogAdapter::cli_interface_;
-std::function<void(const std::string&, const std::string&)>
-    CLILogAdapter::additional_handler_;
+bool CLILogAdapter::enabled_ = false;
 
 void CLILogAdapter::initialize(
     const std::shared_ptr<CLIInterface>& cli_interface) {
-  cli_interface_ = cli_interface;
+  // 检查配置是否启用CLI输出
+  auto& config_manager = ::picoradar::common::ConfigManager::getInstance();
+  bool cli_enabled = config_manager.template getWithDefault<bool>(
+      "logging.cli.enabled", false);
+
+  if (cli_enabled && cli_interface) {
+    // 将CLIInterface转换为CLIOutput接口
+    std::shared_ptr<logger::CLIOutput> cli_output =
+        std::static_pointer_cast<logger::CLIOutput>(cli_interface);
+
+    // 启用CLI输出流
+    logger::Logger::enableCLIOutput(cli_output);
+    enabled_ = true;
+  }
 }
 
 void CLILogAdapter::shutdown() {
-  cli_interface_.reset();
-  additional_handler_ = nullptr;
-}
-
-void CLILogAdapter::setAdditionalHandler(
-    const std::function<void(const std::string&, const std::string&)>&
-        handler) {
-  additional_handler_ = handler;
-}
-
-void CLILogAdapter::addLogEntry(const std::string& level,
-                                const std::string& message) {
-  // 发送到CLI界面
-  if (cli_interface_) {
-    cli_interface_->addLogEntry(level, message);
-  }
-
-  // 发送到额外的处理器（例如文件日志）
-  if (additional_handler_) {
-    additional_handler_(level, message);
-  }
-
-  // 同时保持原有的日志系统
-  if (level == "INFO") {
-    LOG_INFO << message;
-  } else if (level == "WARNING") {
-    LOG_WARNING << message;
-  } else if (level == "ERROR") {
-    LOG_ERROR << message;
-  } else if (level == "DEBUG") {
-    // 只有在调试模式下才输出DEBUG日志到原系统
-    LOG_INFO << "[DEBUG] " << message;
+  if (enabled_) {
+    logger::Logger::disableCLIOutput();
+    enabled_ = false;
   }
 }
+
+bool CLILogAdapter::isEnabled() { return enabled_; }
 
 }  // namespace picoradar::server

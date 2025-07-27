@@ -38,6 +38,17 @@ void Client::Impl::setOnPlayerListUpdate(Client::PlayerListCallback callback) {
 std::future<void> Client::Impl::connect(const std::string& server_address,
                                         const std::string& player_id,
                                         const std::string& token) {
+  // 验证输入参数
+  if (player_id.empty()) {
+    throw std::invalid_argument("Player ID cannot be empty.");
+  }
+  if (token.empty()) {
+    throw std::invalid_argument("Token cannot be empty.");
+  }
+
+  // 解析服务器地址, 如果地址格式不正确会抛出异常
+  auto [host, port_str] = parse_address(server_address);
+
   std::lock_guard lock(state_mutex_);
 
   if (get_state() != ClientState::Disconnected) {
@@ -61,9 +72,6 @@ std::future<void> Client::Impl::connect(const std::string& server_address,
 
   player_id_ = player_id;
   token_ = token;
-
-  // 解析服务器地址
-  auto [host, port] = parse_address(server_address);
 
   // 重新创建io_context和相关组件以确保状态清洁
   ioc_ = std::make_unique<net::io_context>();
@@ -100,7 +108,7 @@ std::future<void> Client::Impl::connect(const std::string& server_address,
 
   // 开始异步解析
   resolver_->async_resolve(
-      host, port,
+      host, port_str,
       [this, resolve_timer](beast::error_code ec,
                             tcp::resolver::results_type results) {
         resolve_timer->cancel();  // 取消超时定时器
@@ -547,21 +555,38 @@ ClientState Client::Impl::get_state() const { return state_.load(); }
 
 std::pair<std::string, std::string> Client::Impl::parse_address(
     const std::string& address) {
+  if (address.empty()) {
+    throw std::invalid_argument("Address cannot be empty.");
+  }
+
   auto colon_pos = address.find_last_of(':');
-  if (colon_pos == std::string::npos) {
+  if (colon_pos == std::string::npos || colon_pos == 0 ||
+      colon_pos == address.length() - 1) {
     throw std::invalid_argument(
-        "Invalid server address format. Expected 'host:port'");
+        "Invalid server address format. Expected 'host:port'.");
   }
 
   std::string host = address.substr(0, colon_pos);
-  std::string port = address.substr(colon_pos + 1);
+  std::string port_str = address.substr(colon_pos + 1);
 
-  if (host.empty() || port.empty()) {
+  if (host.empty() || port_str.empty()) {
     throw std::invalid_argument(
-        "Invalid server address format. Host and port cannot be empty");
+        "Invalid server address format. Host and port cannot be empty.");
   }
 
-  return {host, port};
+  // 验证端口是否为有效数字
+  try {
+    int port = std::stoi(port_str);
+    if (port <= 0 || port > 65535) {
+      throw std::invalid_argument("Port number must be between 1 and 65535.");
+    }
+  } catch (const std::invalid_argument&) {
+    throw std::invalid_argument("Port must be a valid number.");
+  } catch (const std::out_of_range&) {
+    throw std::invalid_argument("Port number is out of range.");
+  }
+
+  return {host, port_str};
 }
 
 template <typename T>
