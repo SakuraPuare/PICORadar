@@ -1,3 +1,32 @@
+// Prevent Windows.h from defining problematic macros
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+// Undefine problematic macros that might conflict with our enum
+#ifdef ERROR
+#undef ERROR
+#endif
+#ifdef FATAL
+#undef FATAL
+#endif
+#ifdef WARNING
+#undef WARNING
+#endif
+#ifdef INFO
+#undef INFO
+#endif
+#ifdef DEBUG
+#undef DEBUG
+#endif
+#ifdef TRACE
+#undef TRACE
+#endif
+#endif
+
 #include "logging.hpp"
 #include <glog/logging.h>
 #include <filesystem>
@@ -49,10 +78,10 @@ void Logger::Init(const std::string& program_name,
             google::ShutdownGoogleLogging();
             google::InitGoogleLogging(program_name.c_str());
         }
-        google::SetLogDestination(google::INFO, (log_dir + "/INFO_").c_str());
-        google::SetLogDestination(google::WARNING, (log_dir + "/WARNING_").c_str());
-        google::SetLogDestination(google::ERROR, (log_dir + "/ERROR_").c_str());
-        google::SetLogDestination(google::FATAL, (log_dir + "/FATAL_").c_str());
+        google::SetLogDestination(google::GLOG_INFO, (log_dir + "/INFO_").c_str());
+        google::SetLogDestination(google::GLOG_WARNING, (log_dir + "/WARNING_").c_str());
+        google::SetLogDestination(google::GLOG_ERROR, (log_dir + "/ERROR_").c_str());
+        google::SetLogDestination(google::GLOG_FATAL, (log_dir + "/FATAL_").c_str());
 
         current_log_level_ = min_log_level;
         google::SetStderrLogging(ToGlogSeverity(min_log_level));
@@ -168,10 +197,10 @@ void Logger::WriteFatalLog(const char* data, int size) {
 
 void Logger::Flush() {
     std::lock_guard<std::mutex> lock(mutex_);
-    google::FlushLogFiles(google::INFO);
-    google::FlushLogFiles(google::WARNING);
-    google::FlushLogFiles(google::ERROR);
-    google::FlushLogFiles(google::FATAL);
+    google::FlushLogFiles(google::GLOG_INFO);
+    google::FlushLogFiles(google::GLOG_WARNING);
+    google::FlushLogFiles(google::GLOG_ERROR);
+    google::FlushLogFiles(google::GLOG_FATAL);
 }
 
 Logger::Logger() = default;
