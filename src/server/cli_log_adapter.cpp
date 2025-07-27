@@ -4,6 +4,7 @@
 
 #include "cli_interface.hpp"
 #include "common/logging.hpp"
+#include "common/platform_fixes.hpp"
 
 namespace picoradar::server {
 

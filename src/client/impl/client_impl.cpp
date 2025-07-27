@@ -4,6 +4,7 @@
 
 #include "client.pb.h"
 #include "common/logging.hpp"
+#include "common/platform_fixes.hpp"
 #include "server.pb.h"
 
 namespace picoradar::client {

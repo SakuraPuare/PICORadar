@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "logging.hpp"
+#include "platform_fixes.hpp"
 
 #ifdef _WIN32
 #include <tlhelp32.h>

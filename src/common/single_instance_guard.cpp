@@ -2,9 +2,11 @@
 
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <unordered_set>
 
 #include "process_utils.hpp"
 
@@ -19,6 +21,10 @@
 #endif
 
 namespace picoradar::common {
+
+// 进程内锁状态跟踪
+static std::mutex process_locks_mutex;
+static std::unordered_set<std::string> active_locks;
 
 // ... (get_temp_dir_path 辅助函数保持不变) ...
 auto get_temp_dir_path() -> std::string {
@@ -53,6 +59,15 @@ auto read_pid_from_lockfile(const std::string& path) -> ProcessId {
 SingleInstanceGuard::SingleInstanceGuard(const std::string& lock_file_name) {
   lock_file_path_ = get_temp_dir_path() + "\\" + lock_file_name;
 
+  // 首先检查进程内是否已经有这个锁
+  {
+    std::lock_guard<std::mutex> lock(process_locks_mutex);
+    if (active_locks.find(lock_file_path_) != active_locks.end()) {
+      throw std::runtime_error(
+          "PICO Radar server is already running in this process.");
+    }
+  }
+
   for (int i = 0; i < 2; ++i) {  // 最多重试一次
     file_handle_ = CreateFileA(
         lock_file_path_.c_str(), GENERIC_WRITE,
@@ -67,6 +82,13 @@ SingleInstanceGuard::SingleInstanceGuard(const std::string& lock_file_name) {
       DWORD bytes_written;
       WriteFile(file_handle_, pid_str.c_str(), pid_str.length(), &bytes_written,
                 NULL);
+
+      // 添加到进程内活动锁集合
+      {
+        std::lock_guard<std::mutex> lock(process_locks_mutex);
+        active_locks.insert(lock_file_path_);
+      }
+
       return;  // 成功，退出构造函数
     }
 
@@ -91,6 +113,12 @@ SingleInstanceGuard::SingleInstanceGuard(const std::string& lock_file_name) {
 
 SingleInstanceGuard::~SingleInstanceGuard() {
   if (file_handle_ != INVALID_HANDLE_VALUE) {
+    // 从进程内活动锁集合中移除
+    {
+      std::lock_guard<std::mutex> lock(process_locks_mutex);
+      active_locks.erase(lock_file_path_);
+    }
+
     CloseHandle(file_handle_);
     // FILE_FLAG_DELETE_ON_CLOSE 会自动处理删除
   }
@@ -100,6 +128,15 @@ SingleInstanceGuard::~SingleInstanceGuard() {
 // --- POSIX 实现 (带陈旧锁检测) ---
 SingleInstanceGuard::SingleInstanceGuard(const std::string& lock_file_name) {
   lock_file_path_ = get_temp_dir_path() + "/" + lock_file_name;
+
+  // 首先检查进程内是否已经有这个锁
+  {
+    std::lock_guard<std::mutex> lock(process_locks_mutex);
+    if (active_locks.find(lock_file_path_) != active_locks.end()) {
+      throw std::runtime_error(
+          "PICO Radar server is already running in this process.");
+    }
+  }
 
   for (int i = 0; i < 2; ++i) {  // 最多重试一次
     file_descriptor_ = open(lock_file_path_.c_str(), O_RDWR | O_CREAT, 0666);
@@ -122,11 +159,18 @@ SingleInstanceGuard::SingleInstanceGuard(const std::string& lock_file_name) {
       if (write(file_descriptor_, pid_str.c_str(), pid_str.length()) ==
           -1) { /* ignore */
       }
+
+      // 添加到进程内活动锁集合
+      {
+        std::lock_guard<std::mutex> lock(process_locks_mutex);
+        active_locks.insert(lock_file_path_);
+      }
+
       return;  // 成功，退出构造函数
     }
 
     // 如果获取锁失败
-    if (errno != EWOULDBLOCK) {
+    if (errno != EWOULDBLOCK && errno != EAGAIN) {
       close(file_descriptor_);
       throw std::system_error(errno, std::system_category(),
                               "Failed to acquire lock");
@@ -139,14 +183,25 @@ SingleInstanceGuard::SingleInstanceGuard(const std::string& lock_file_name) {
     if (pid > 0 && !is_process_running(pid)) {
       // 进程不存在，是陈旧锁
       unlink(lock_file_path_.c_str());  // 删除它然后重试
+      continue;                         // 继续重试
     }
+
+    // 进程仍在运行，立即抛出异常
+    throw std::runtime_error("PICO Radar server is already running.");
   }
-  // 进程仍在运行
+
+  // 如果到这里，说明两次重试都失败了
   throw std::runtime_error("PICO Radar server is already running.");
 }
 
 SingleInstanceGuard::~SingleInstanceGuard() {
   if (file_descriptor_ != -1) {
+    // 从进程内活动锁集合中移除
+    {
+      std::lock_guard<std::mutex> lock(process_locks_mutex);
+      active_locks.erase(lock_file_path_);
+    }
+
     struct flock lock_info = {0};
     lock_info.l_type = F_UNLCK;
     lock_info.l_whence = SEEK_SET;

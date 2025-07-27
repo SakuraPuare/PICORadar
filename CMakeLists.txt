@@ -36,7 +36,11 @@ if(WIN32)
             /bigobj                 # 支持大型对象文件
             /utf-8                  # 使用 UTF-8 编码
             /EHsc                   # 启用 C++ 异常处理
+            /Zc:__cplusplus         # 启用正确的 __cplusplus 宏值
         )
+        # 设置全局编译标志
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /EHsc")
     endif()
 endif()
 

@@ -6,6 +6,7 @@
 #include "common/config_manager.hpp"
 #include "common/constants.hpp"
 #include "common/logging.hpp"
+#include "common/platform_fixes.hpp"
 #include "network/error_context.hpp"
 #include "player.pb.h"
 #include "server.pb.h"

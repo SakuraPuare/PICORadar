@@ -1,16 +1,3 @@
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-// Prevent Windows from defining ERROR macro that conflicts with logging
-#ifdef ERROR
-#undef ERROR
-#endif
-#endif
-
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -22,6 +9,7 @@
 #include "common/config_manager.hpp"
 #include "common/constants.hpp"
 #include "common/logging.hpp"
+#include "common/platform_fixes.hpp"
 #include "common/single_instance_guard.hpp"
 #include "server.hpp"
 

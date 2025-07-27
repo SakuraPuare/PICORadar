@@ -24,6 +24,7 @@
         "*.inc": "cpp",
         "mutex": "cpp",
         "shared_mutex": "cpp",
-        "syncstream": "cpp"
+        "syncstream": "cpp",
+        "cerrno": "cpp"
     }
 }

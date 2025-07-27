@@ -1,34 +1,5 @@
 #pragma once
 
-// Prevent Windows.h from defining min/max macros and other problematic macros
-#ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-// Undefine problematic macros that might conflict with our enum
-#ifdef ERROR
-#undef ERROR
-#endif
-#ifdef FATAL
-#undef FATAL
-#endif
-#ifdef WARNING
-#undef WARNING
-#endif
-#ifdef INFO
-#undef INFO
-#endif
-#ifdef DEBUG
-#undef DEBUG
-#endif
-#ifdef TRACE
-#undef TRACE
-#endif
-#endif
-
 #include <glog/logging.h>
 #include <glog/raw_logging.h>
 
@@ -36,6 +7,11 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+
+#include "platform_fixes.hpp"
+
+// Ensure Windows macros are undefined after all includes
+UNDEFINE_WINDOWS_MACROS()
 
 namespace logger {
 

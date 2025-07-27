@@ -1,6 +1,8 @@
 #pragma once
 
+#include <mutex>
 #include <string>
+#include <unordered_set>
 
 #ifdef _WIN32
 #include <windows.h>
