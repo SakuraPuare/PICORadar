@@ -5,7 +5,7 @@
         "websocket_port": 11451
     },
     "auth": {
-        "token": "secure_production_token_change_me_2025"
+        "token": "pico_radar_secret_token"
     },
     "discovery": {
         "udp_port": 11452,
@@ -14,9 +14,41 @@
         "response_prefix": "PICORADAR_SERVER_AT_"
     },
     "logging": {
-        "level": "INFO",
+        "level": "DEBUG",
         "file_enabled": true,
-        "console_enabled": true
+        "console_enabled": true,
+        "file": {
+            "directory": "./logs",
+            "filename_pattern": "picoradar.log",
+            "max_size_mb": 10,
+            "max_files": 10,
+            "single_file": true,
+            "auto_flush": true
+        },
+        "console": {
+            "colored": true,
+            "min_level": "INFO"
+        },
+        "cli": {
+            "enabled": false,
+            "buffer_size": 1000
+        },
+        "format": {
+            "pattern": "[{timestamp}] [{level}] [{location}] {message}",
+            "timestamp_format": "%Y-%m-%d %H:%M:%S",
+            "include_location": true,
+            "include_thread_id": false
+        },
+        "performance": {
+            "async_logging": false,
+            "buffer_size": 1024,
+            "flush_interval_ms": 1000
+        },
+        "module_levels": {
+            "network": "DEBUG",
+            "server": "INFO",
+            "auth": "WARNING"
+        }
     },
     "timeouts": {
         "client_handshake_ms": 1000,

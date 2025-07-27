@@ -16,8 +16,13 @@ class ConfigManagerTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
     // 初始化日志系统
-    logger::Logger::Init("config_manager_test", "./logs",
-                         logger::LogLevel::INFO, 10, false);
+    logger::LogConfig config = logger::LogConfig::loadFromConfigManager();
+    config.log_directory = "./logs";
+    config.global_level = logger::LogLevel::INFO;
+    config.file_enabled = true;
+    config.console_enabled = false;
+    config.max_files = 10;
+    logger::Logger::Init("config_manager_test", config);
   }
 
   static void TearDownTestSuite() {
@@ -546,4 +551,264 @@ TEST_F(ConfigManagerTest, GetConfigMethod) {
   EXPECT_TRUE(full_config.contains("nested"));
   EXPECT_TRUE(full_config["nested"].contains("inner_key"));
   EXPECT_EQ(full_config["nested"]["inner_key"], "inner_value");
+}
+
+/**
+ * @brief 测试配置文件的边界条件
+ */
+TEST_F(ConfigManagerTest, ConfigFileBoundaryConditions) {
+  ConfigManager& config = ConfigManager::getInstance();
+
+  // 测试空JSON文件
+  createTestConfigFile("{}");
+  auto empty_result = config.loadFromFile(test_config_path_.string());
+  EXPECT_TRUE(empty_result.has_value());
+  EXPECT_EQ(config.getConfig().size(), 0);
+
+  // 测试只有null值的JSON
+  createTestConfigFile(R"({"null_value": null})");
+  auto null_result = config.loadFromFile(test_config_path_.string());
+  EXPECT_TRUE(null_result.has_value());
+  EXPECT_FALSE(config.getString("null_value").has_value());
+
+  // 测试包含数组的JSON
+  createTestConfigFile(R"({
+        "array_value": [1, 2, 3, "string", true],
+        "object_array": [{"name": "obj1"}, {"name": "obj2"}]
+    })");
+  auto array_result = config.loadFromFile(test_config_path_.string());
+  EXPECT_TRUE(array_result.has_value());
+
+  // 数组应该存在于配置中，但不能直接获取为基本类型
+  EXPECT_TRUE(config.hasKey("array_value"));
+  EXPECT_FALSE(config.getString("array_value").has_value());
+}
+
+/**
+ * @brief 测试极大和极小的数值
+ */
+TEST_F(ConfigManagerTest, ExtremeNumericValues) {
+  ConfigManager& config = ConfigManager::getInstance();
+
+  nlohmann::json extreme_json = {
+      {"max_int", std::numeric_limits<int>::max()},
+      {"min_int", std::numeric_limits<int>::min()},
+      {"max_double", std::numeric_limits<double>::max()},
+      {"min_double", std::numeric_limits<double>::lowest()},
+      {"infinity", std::numeric_limits<double>::infinity()},
+      {"neg_infinity", -std::numeric_limits<double>::infinity()}};
+
+  auto result = config.loadFromJson(extreme_json);
+  EXPECT_TRUE(result.has_value());
+
+  // 测试极值整数
+  auto max_int = config.getInt("max_int");
+  EXPECT_TRUE(max_int.has_value());
+  EXPECT_EQ(max_int.value(), std::numeric_limits<int>::max());
+
+  auto min_int = config.getInt("min_int");
+  EXPECT_TRUE(min_int.has_value());
+  EXPECT_EQ(min_int.value(), std::numeric_limits<int>::min());
+
+  // 测试极值浮点数
+  auto max_double = config.getDouble("max_double");
+  EXPECT_TRUE(max_double.has_value());
+  EXPECT_DOUBLE_EQ(max_double.value(), std::numeric_limits<double>::max());
+
+  auto min_double = config.getDouble("min_double");
+  EXPECT_TRUE(min_double.has_value());
+  EXPECT_DOUBLE_EQ(min_double.value(), std::numeric_limits<double>::lowest());
+
+  // 测试无穷大值
+  auto inf_val = config.getDouble("infinity");
+  EXPECT_TRUE(inf_val.has_value());
+  EXPECT_TRUE(std::isinf(inf_val.value()));
+  EXPECT_GT(inf_val.value(), 0);
+
+  auto neg_inf_val = config.getDouble("neg_infinity");
+  EXPECT_TRUE(neg_inf_val.has_value());
+  EXPECT_TRUE(std::isinf(neg_inf_val.value()));
+  EXPECT_LT(neg_inf_val.value(), 0);
+}
+
+/**
+ * @brief 测试超长字符串和键名
+ */
+TEST_F(ConfigManagerTest, VeryLongStringsAndKeys) {
+  ConfigManager& config = ConfigManager::getInstance();
+
+  // 创建超长字符串
+  std::string very_long_value(10000, 'A');
+  std::string very_long_key(1000, 'K');
+
+  config.set("very_long_value", very_long_value);
+  config.set(very_long_key, std::string("short_value"));
+
+  // 验证超长值能正确存储和获取
+  auto retrieved_long = config.getString("very_long_value");
+  EXPECT_TRUE(retrieved_long.has_value());
+  EXPECT_EQ(retrieved_long.value(), very_long_value);
+  EXPECT_EQ(retrieved_long.value().length(), 10000);
+
+  // 验证超长键名能正确存储和获取
+  auto retrieved_by_long_key = config.getString(very_long_key);
+  EXPECT_TRUE(retrieved_by_long_key.has_value());
+  EXPECT_EQ(retrieved_by_long_key.value(), "short_value");
+}
+
+/**
+ * @brief 测试特殊字符在键名和值中的处理
+ */
+TEST_F(ConfigManagerTest, SpecialCharactersHandling) {
+  ConfigManager& config = ConfigManager::getInstance();
+
+  // 测试包含特殊字符的键名和值
+  std::string special_key = "key.with.dots[and]brackets{and}braces";
+  std::string special_value = "Value with newlines\nand tabs\tand quotes\"'";
+  std::string unicode_value = "Unicode: 中文 🌟 ñoël café";
+
+  config.set(special_key, special_value);
+  config.set("unicode_test", unicode_value);
+  config.set("empty_string", std::string(""));
+
+  // 验证特殊字符正确处理
+  auto retrieved_special = config.getString(special_key);
+  EXPECT_TRUE(retrieved_special.has_value());
+  EXPECT_EQ(retrieved_special.value(), special_value);
+
+  auto retrieved_unicode = config.getString("unicode_test");
+  EXPECT_TRUE(retrieved_unicode.has_value());
+  EXPECT_EQ(retrieved_unicode.value(), unicode_value);
+
+  auto retrieved_empty = config.getString("empty_string");
+  EXPECT_TRUE(retrieved_empty.has_value());
+  EXPECT_EQ(retrieved_empty.value(), "");
+}
+
+/**
+ * @brief 测试配置重载和覆盖行为
+ */
+TEST_F(ConfigManagerTest, ConfigReloadAndOverride) {
+  ConfigManager& config = ConfigManager::getInstance();
+
+  // 首次加载配置
+  createTestConfigFile(R"({
+        "shared_key": "original_value",
+        "only_in_first": "first_value"
+    })");
+  auto first_load = config.loadFromFile(test_config_path_.string());
+  EXPECT_TRUE(first_load.has_value());
+
+  auto original_value = config.getString("shared_key");
+  EXPECT_TRUE(original_value.has_value());
+  EXPECT_EQ(original_value.value(), "original_value");
+
+  auto first_only = config.getString("only_in_first");
+  EXPECT_TRUE(first_only.has_value());
+  EXPECT_EQ(first_only.value(), "first_value");
+
+  // 第二次加载不同的配置（覆盖）
+  createTestConfigFile(R"({
+        "shared_key": "overridden_value",
+        "only_in_second": "second_value"
+    })");
+  auto second_load = config.loadFromFile(test_config_path_.string());
+  EXPECT_TRUE(second_load.has_value());
+
+  // 验证覆盖行为
+  auto overridden_value = config.getString("shared_key");
+  EXPECT_TRUE(overridden_value.has_value());
+  EXPECT_EQ(overridden_value.value(), "overridden_value");
+
+  auto second_only = config.getString("only_in_second");
+  EXPECT_TRUE(second_only.has_value());
+  EXPECT_EQ(second_only.value(), "second_value");
+
+  // 原来的键应该不再存在
+  auto missing_first = config.getString("only_in_first");
+  EXPECT_FALSE(missing_first.has_value());
+}
+
+/**
+ * @brief 测试配置缓存机制
+ */
+TEST_F(ConfigManagerTest, ConfigCachingMechanism) {
+  ConfigManager& config = ConfigManager::getInstance();
+
+  createTestConfigFile(R"({
+        "cached_string": "test_value",
+        "cached_int": 42
+    })");
+  auto load_result = config.loadFromFile(test_config_path_.string());
+  EXPECT_TRUE(load_result.has_value());
+
+  // 首次访问，应该填充缓存
+  auto start_time = std::chrono::high_resolution_clock::now();
+  for (int i = 0; i < 1000; ++i) {
+    auto value = config.getString("cached_string");
+    EXPECT_TRUE(value.has_value());
+  }
+  auto first_duration = std::chrono::high_resolution_clock::now() - start_time;
+
+  // 第二次访问，应该使用缓存，速度更快
+  start_time = std::chrono::high_resolution_clock::now();
+  for (int i = 0; i < 1000; ++i) {
+    auto value = config.getString("cached_string");
+    EXPECT_TRUE(value.has_value());
+  }
+  auto second_duration = std::chrono::high_resolution_clock::now() - start_time;
+
+  // 缓存应该使访问速度更快（至少不会更慢）
+  EXPECT_LE(second_duration, first_duration * 2);  // 允许一些性能波动
+}
+
+/**
+ * @brief 测试高频率并发访问
+ */
+TEST_F(ConfigManagerTest, HighFrequencyConcurrentAccess) {
+  ConfigManager& config = ConfigManager::getInstance();
+
+  createTestConfigFile(R"({
+        "concurrent_string": "concurrent_value",
+        "concurrent_int": 100,
+        "concurrent_bool": true
+    })");
+  auto load_result = config.loadFromFile(test_config_path_.string());
+  EXPECT_TRUE(load_result.has_value());
+
+  constexpr int num_threads = 20;
+  constexpr int operations_per_thread = 1000;
+  std::vector<std::thread> threads;
+  std::atomic<int> successful_operations{0};
+  std::atomic<int> failed_operations{0};
+
+  for (int i = 0; i < num_threads; ++i) {
+    threads.emplace_back([&] {
+      for (int j = 0; j < operations_per_thread; ++j) {
+        try {
+          auto str_val = config.getString("concurrent_string");
+          auto int_val = config.getInt("concurrent_int");
+          auto bool_val = config.getBool("concurrent_bool");
+          bool has_key = config.hasKey("concurrent_string");
+
+          if (str_val.has_value() && int_val.has_value() &&
+              bool_val.has_value() && has_key) {
+            successful_operations.fetch_add(1);
+          } else {
+            failed_operations.fetch_add(1);
+          }
+        } catch (...) {
+          failed_operations.fetch_add(1);
+        }
+      }
+    });
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  // 验证所有操作都成功，没有崩溃或数据竞争
+  EXPECT_EQ(successful_operations.load(), num_threads * operations_per_thread);
+  EXPECT_EQ(failed_operations.load(), 0);
 }

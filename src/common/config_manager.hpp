@@ -69,6 +69,9 @@ class ConfigManager {
   // 获取整个配置的副本
   nlohmann::json getConfig() const;
 
+  // 验证配置完整性
+  bool validateConfig() const;
+
  private:
   ConfigManager() = default;
   ~ConfigManager() = default;
@@ -82,11 +85,14 @@ class ConfigManager {
   // 私有辅助方法
   ConfigResult<nlohmann::json> getJsonValue(const std::string& key) const;
   void loadEnvironmentVariables();
+  void validateCriticalConfigs();
   static std::string generateSecureToken();
 
-  // 内部设置方法，假设调用者已持有锁
+  // 内部方法，假设调用者已持有锁
   template <typename T>
   void setNoLock(const std::string& key, const T& value);
+  ConfigResult<nlohmann::json> getJsonValueNoLock(const std::string& key) const;
+  bool hasKeyNoLock(const std::string& key) const;
 };
 
 // 模板特化声明
