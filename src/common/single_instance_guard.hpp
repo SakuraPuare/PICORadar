@@ -45,6 +45,14 @@ class SingleInstanceGuard {
 
   ~SingleInstanceGuard();
 
+  /**
+   * @brief 获取锁文件的完整路径。
+   * @return 锁文件的完整路径。
+   */
+  [[nodiscard]] auto get_lock_file_path() const -> const std::string& {
+    return lock_file_path_;
+  }
+
   // 禁止拷贝和赋值
   SingleInstanceGuard(const SingleInstanceGuard&) = delete;
   auto operator=(const SingleInstanceGuard&) -> SingleInstanceGuard& = delete;

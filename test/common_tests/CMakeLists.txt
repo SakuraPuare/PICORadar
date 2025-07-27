@@ -18,6 +18,8 @@ add_executable(common_tests
     test_single_instance_guard.cpp
     test_config_manager.cpp
     test_process_utils.cpp
+    test_string_utils.cpp
+    test_logging.cpp
     test_performance.cpp
     test_integration.cpp
     $<TARGET_OBJECTS:gtest_main_obj>

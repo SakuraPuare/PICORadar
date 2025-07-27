@@ -332,7 +332,13 @@ void ui_update_thread() {
 
 auto main(const int argc, char* argv[]) -> int {
   // 初始化日志系统
-  logger::Logger::Init("wasd_game", "./logs", logger::LogLevel::INFO, 10, true);
+  logger::LogConfig config = logger::LogConfig::loadFromConfigManager();
+  config.log_directory = "./logs";
+  config.global_level = logger::LogLevel::INFO;
+  config.file_enabled = true;
+  config.console_enabled = true;
+  config.max_files = 10;
+  logger::Logger::Init("wasd_game", config);
 
   // 设置信号处理
   signal(SIGINT, signal_handler);
@@ -358,7 +364,7 @@ auto main(const int argc, char* argv[]) -> int {
   // 解析命令行参数
   std::string server_address = "127.0.0.1:11451";
   std::string player_id = username;  // 使用用户输入的用户名作为玩家ID
-  std::string token = "secure_production_token_change_me_2025";
+  std::string token = "pico_radar_secret_token";
 
   if (argc >= 2) {
     server_address = argv[1];

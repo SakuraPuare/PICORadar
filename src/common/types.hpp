@@ -36,7 +36,7 @@ using ErrorCallback = std::function<void(const std::string& error)>;
 
 // 结果类型
 namespace picoradar {
-enum class ConnectionState {
+enum class ConnectionState : std::uint8_t {
   Disconnected,
   Connecting,
   Connected,
@@ -44,7 +44,7 @@ enum class ConnectionState {
   Failed
 };
 
-enum class OperationResult {
+enum class OperationResult : std::uint8_t {
   Success,
   Failed,
   Timeout,

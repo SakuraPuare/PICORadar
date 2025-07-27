@@ -35,8 +35,7 @@ repos:
             (?x)^(
                 build/|
                 vcpkg/|
-                vcpkg_installed/|
-                unreal/
+                vcpkg_installed/
             )$
         files: |
             (?x)^(

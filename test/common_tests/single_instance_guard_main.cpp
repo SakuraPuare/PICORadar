@@ -1,11 +1,10 @@
-#include <glog/logging.h>
-
 #include <chrono>
 #include <iostream>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include "common/logging.hpp"
 #include "common/single_instance_guard.hpp"
 
 using picoradar::common::SingleInstanceGuard;
@@ -33,14 +32,14 @@ auto parse_lock_file_arg(const std::vector<std::string>& args) -> std::string {
 void run_lock_mode(const std::string& lock_file) {
   try {
     SingleInstanceGuard guard(lock_file);
-    LOG(INFO) << "LOCK_ACQUIRED for file: " << lock_file;
+    LOG_INFO << "LOCK_ACQUIRED for file: " << lock_file;
 
     // 模拟一个正在运行的服务器
     while (true) {
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
   } catch (const std::runtime_error& e) {
-    LOG(ERROR) << "LOCK_FAILED: " << e.what();
+    LOG_ERROR << "LOCK_FAILED: " << e.what();
     exit(1);
   }
 }
@@ -53,14 +52,14 @@ void run_check_mode(const std::string& lock_file) {
   try {
     SingleInstanceGuard guard(lock_file);
     // 如果我们能获取锁，说明测试失败了
-    LOG(ERROR) << "CHECK_FAILED: Successfully acquired lock when it should "
-                  "have failed for file: "
-               << lock_file;
+    LOG_ERROR << "CHECK_FAILED: Successfully acquired lock when it should "
+                 "have failed for file: "
+              << lock_file;
     exit(1);
   } catch (const std::runtime_error& e) {
     // 成功捕获到异常，说明测试通过
-    LOG(INFO) << "CHECK_SUCCESS: Correctly failed to acquire lock for file: "
-              << lock_file << " - " << e.what();
+    LOG_INFO << "CHECK_SUCCESS: Correctly failed to acquire lock for file: "
+             << lock_file << " - " << e.what();
     exit(0);
   }
 }
@@ -72,13 +71,13 @@ void run_check_mode(const std::string& lock_file) {
 void run_quick_exit_mode(const std::string& lock_file) {
   try {
     SingleInstanceGuard guard(lock_file);
-    LOG(INFO) << "QUICK_EXIT: Lock acquired for file: " << lock_file
-              << ", exiting in 100ms";
+    LOG_INFO << "QUICK_EXIT: Lock acquired for file: " << lock_file
+             << ", exiting in 100ms";
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    LOG(INFO) << "QUICK_EXIT: Exiting now";
+    LOG_INFO << "QUICK_EXIT: Exiting now";
     exit(0);
   } catch (const std::runtime_error& e) {
-    LOG(ERROR) << "QUICK_EXIT_FAILED: " << e.what();
+    LOG_ERROR << "QUICK_EXIT_FAILED: " << e.what();
     exit(1);
   }
 }
@@ -90,11 +89,11 @@ void run_quick_exit_mode(const std::string& lock_file) {
 void run_exit_quickly_mode(const std::string& lock_file) {
   try {
     SingleInstanceGuard guard(lock_file);
-    LOG(INFO) << "EXIT_QUICKLY: Lock acquired for file: " << lock_file
-              << ", exiting immediately";
+    LOG_INFO << "EXIT_QUICKLY: Lock acquired for file: " << lock_file
+             << ", exiting immediately";
     exit(0);
   } catch (const std::runtime_error& e) {
-    LOG(ERROR) << "EXIT_QUICKLY_FAILED: " << e.what();
+    LOG_ERROR << "EXIT_QUICKLY_FAILED: " << e.what();
     exit(1);
   }
 }
@@ -106,15 +105,15 @@ void run_exit_quickly_mode(const std::string& lock_file) {
 void run_test_mode(const std::string& lock_file) {
   try {
     SingleInstanceGuard guard(lock_file);
-    LOG(INFO) << "TEST_MODE: Lock acquired for file: " << lock_file;
+    LOG_INFO << "TEST_MODE: Lock acquired for file: " << lock_file;
 
     // 模拟一些工作
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    LOG(INFO) << "TEST_MODE: Work completed, exiting normally";
+    LOG_INFO << "TEST_MODE: Work completed, exiting normally";
     exit(0);
   } catch (const std::runtime_error& e) {
-    LOG(ERROR) << "TEST_MODE_FAILED: " << e.what();
+    LOG_ERROR << "TEST_MODE_FAILED: " << e.what();
     exit(1);
   }
 }
@@ -142,14 +141,15 @@ void show_usage(const char* program_name) {
 }
 
 auto main(const int argc, char** argv) -> int {
-  google::InitGoogleLogging(argv[0]);
-
-  // 设置日志级别和格式
-  FLAGS_logtostderr = true;
-  FLAGS_colorlogtostderr = true;
+  // 初始化日志系统
+  logger::LogConfig config = logger::LogConfig::loadFromConfigManager();
+  config.console_enabled = true;
+  config.console_colored = true;
+  config.file_enabled = false;
+  logger::Logger::Init(argv[0], config);
 
   if (argc < 2) {
-    LOG(ERROR) << "Error: Missing required mode argument";
+    LOG_ERROR << "Error: Missing required mode argument";
     show_usage(argv[0]);
     return 1;
   }
@@ -163,7 +163,7 @@ auto main(const int argc, char** argv) -> int {
   const std::string mode = args[0];
   const std::string lock_file = parse_lock_file_arg(args);
 
-  LOG(INFO) << "Starting with mode: " << mode << ", lock file: " << lock_file;
+  LOG_INFO << "Starting with mode: " << mode << ", lock file: " << lock_file;
 
   // 根据模式执行相应的操作
   if (mode == "--lock") {
@@ -180,7 +180,7 @@ auto main(const int argc, char** argv) -> int {
     show_usage(argv[0]);
     return 0;
   } else {
-    LOG(ERROR) << "Error: Unknown mode '" << mode << "'";
+    LOG_ERROR << "Error: Unknown mode '" << mode << "'";
     show_usage(argv[0]);
     return 1;
   }

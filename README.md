@@ -105,16 +105,6 @@
 | **CMake** | 3.20+                          | 最新版本                             |
 | **网络**    | Gigabit Ethernet               | 低延迟交换机                           |
 
-### ⚡ 一键安装
-
-```bash
-# 🐧 Linux / 🍎 macOS
-curl -fsSL https://raw.githubusercontent.com/SakuraPuare/PicoRadar/main/scripts/install.sh | bash
-
-# 🪟 Windows (PowerShell)
-irm https://raw.githubusercontent.com/SakuraPuare/PicoRadar/main/scripts/install.ps1 | iex
-```
-
 ### 🔧 手动安装
 
 <details>
@@ -373,7 +363,5 @@ cmake --build build --target test
 <div align="center">
 
 **🌟 如果这个项目对您有帮助，请给我们一个 Star！**
-
-**Made with ❤️ by the PICORadar Team**
 
 </div>

@@ -163,7 +163,7 @@ TEST_F(SingleInstanceGuardTest, LockFileNameEdgeCases) {
   EXPECT_NO_THROW({
     try {
       SingleInstanceGuard empty_guard("");
-    } catch (const std::runtime_error&) {
+    } catch (const std::exception&) {
       // 空字符串可能会抛出异常，这是可以接受的
     }
   }) << "空字符串参数不应该导致程序崩溃";
@@ -307,4 +307,235 @@ TEST_F(SingleInstanceGuardTest, RapidLockCycling) {
   // 最终验证锁仍然可用
   EXPECT_NO_THROW({ SingleInstanceGuard final_guard(test_lock_file_); })
       << "经过快速循环后，锁仍应可用";
+}
+
+/**
+ * @brief 测试异常安全性
+ */
+TEST_F(SingleInstanceGuardTest, ExceptionSafety) {
+  // 测试在锁持有期间抛出异常的情况
+  EXPECT_NO_THROW({
+    try {
+      SingleInstanceGuard guard(test_lock_file_);
+
+      // 模拟异常
+      throw std::runtime_error("Test exception");
+
+    } catch (const std::runtime_error& e) {
+      if (std::string(e.what()) != "Test exception") {
+        throw;  // 重新抛出非预期的异常
+      }
+      // 预期的测试异常，忽略
+    }
+  });
+
+  // 即使发生异常，锁也应该被正确释放
+  EXPECT_NO_THROW(SingleInstanceGuard guard(test_lock_file_));
+}
+
+/**
+ * @brief 测试锁文件的内容验证
+ */
+TEST_F(SingleInstanceGuardTest, LockFileContentValidation) {
+  std::string actual_lock_file_path;
+
+  {
+    SingleInstanceGuard guard(test_lock_file_);
+
+    // 获取实际的锁文件路径
+    actual_lock_file_path = guard.get_lock_file_path();
+
+    // 验证锁文件存在
+    EXPECT_TRUE(std::filesystem::exists(actual_lock_file_path));
+
+    // 验证锁文件内容包含PID
+    std::ifstream lock_file(actual_lock_file_path);
+    EXPECT_TRUE(lock_file.is_open());
+
+    std::string content;
+    std::getline(lock_file, content);
+    EXPECT_FALSE(content.empty());
+
+    // 验证内容是数字（PID）
+    bool is_numeric = !content.empty() &&
+                      std::all_of(content.begin(), content.end(), ::isdigit);
+    EXPECT_TRUE(is_numeric)
+        << "Lock file content should be numeric: " << content;
+
+    if (is_numeric) {
+      // 验证PID大于0
+      int pid = std::stoi(content);
+      EXPECT_GT(pid, 0);
+    }
+  }  // guard 在这里自动销毁
+
+  // 锁释放后，文件应该被删除（在POSIX系统中）
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+#ifndef _WIN32
+  // 在Unix系统中，锁文件应该被删除
+  EXPECT_FALSE(std::filesystem::exists(actual_lock_file_path));
+#endif
+}
+
+/**
+ * @brief 测试无效参数处理
+ */
+TEST_F(SingleInstanceGuardTest, InvalidParameters) {
+  // 测试空文件名
+  EXPECT_THROW(SingleInstanceGuard(""), std::invalid_argument);
+
+  // 测试只包含空格的文件名
+  EXPECT_THROW(SingleInstanceGuard("   "), std::invalid_argument);
+
+  // 测试包含路径分隔符但实际无效的路径
+  std::vector<std::string> invalid_paths = {
+      "/dev/null/invalid.pid",         // 不能在/dev/null下创建文件
+      std::string(1000, 'a') + ".pid"  // 过长的文件名
+  };
+
+  for (const auto& invalid_path : invalid_paths) {
+    EXPECT_THROW(
+        { SingleInstanceGuard guard(invalid_path); }, std::exception)
+        << "Should fail for path: " << invalid_path;
+  }
+}
+
+/**
+ * @brief 测试特殊字符文件名的处理
+ */
+TEST_F(SingleInstanceGuardTest, SpecialCharacterFilenames) {
+  std::vector<std::string> special_names = {
+      "test space.pid", "test-dash.pid", "test_underscore.pid", "test.dot.pid",
+      "test123number.pid"};
+
+  for (const auto& name : special_names) {
+    EXPECT_NO_THROW({ SingleInstanceGuard guard(name); })
+        << "Failed with filename: " << name;
+
+    cleanup_lock_file(name);
+  }
+}
+
+/**
+ * @brief 测试长时间持有锁
+ */
+TEST_F(SingleInstanceGuardTest, LongTermLockHolding) {
+  auto start_time = std::chrono::steady_clock::now();
+
+  {
+    SingleInstanceGuard guard(test_lock_file_);
+
+    // 持有锁较长时间
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    // 在持有期间，其他尝试应该失败
+    EXPECT_THROW(SingleInstanceGuard duplicate(test_lock_file_),
+                 std::runtime_error);
+  }
+
+  auto end_time = std::chrono::steady_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      end_time - start_time);
+
+  // 验证确实持有了预期的时间
+  EXPECT_GE(duration.count(), 400);  // 允许一些时间偏差
+
+  // 锁释放后应该能够重新获取
+  EXPECT_NO_THROW(SingleInstanceGuard new_guard(test_lock_file_));
+}
+
+/**
+ * @brief 测试竞态条件处理
+ */
+TEST_F(SingleInstanceGuardTest, RaceConditionHandling) {
+  std::atomic<bool> start_flag{false};
+  std::atomic<int> successful_count{0};
+  std::atomic<int> failed_count{0};
+  constexpr int num_threads = 20;
+  std::vector<std::thread> threads;
+
+  // 创建多个线程，让它们同时尝试获取锁
+  for (int i = 0; i < num_threads; ++i) {
+    threads.emplace_back([&] {
+      // 等待开始信号
+      while (!start_flag.load()) {
+        std::this_thread::yield();
+      }
+
+      try {
+        SingleInstanceGuard guard(test_lock_file_);
+        successful_count.fetch_add(1);
+
+        // 持有锁一小段时间
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+      } catch (const std::runtime_error&) {
+        failed_count.fetch_add(1);
+      }
+    });
+  }
+
+  // 同时启动所有线程
+  start_flag.store(true);
+
+  // 等待所有线程完成
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  // 验证只有一个线程成功获取了锁
+  EXPECT_EQ(successful_count.load(), 1);
+  EXPECT_EQ(failed_count.load(), num_threads - 1);
+  EXPECT_EQ(successful_count.load() + failed_count.load(), num_threads);
+}
+
+/**
+ * @brief 压力测试：大量并发锁操作
+ */
+TEST_F(SingleInstanceGuardTest, StressTestConcurrentOperations) {
+  constexpr int num_iterations = 500;
+  constexpr int num_threads = 8;
+  std::atomic<int> total_operations{0};
+  std::atomic<int> successful_operations{0};
+  std::vector<std::thread> threads;
+
+  auto start_time = std::chrono::steady_clock::now();
+
+  for (int t = 0; t < num_threads; ++t) {
+    threads.emplace_back([&, t] {
+      for (int i = 0; i < num_iterations / num_threads; ++i) {
+        std::string lock_name = test_lock_file_ + "_stress_" +
+                                std::to_string(t) + "_" + std::to_string(i);
+
+        try {
+          SingleInstanceGuard guard(lock_name);
+          successful_operations.fetch_add(1);
+
+          // 短暂持有锁
+          std::this_thread::sleep_for(std::chrono::microseconds(100));
+
+        } catch (const std::exception& e) {
+          // 某些操作可能因为系统限制而失败，这是可以接受的
+        }
+
+        total_operations.fetch_add(1);
+        cleanup_lock_file(lock_name);
+      }
+    });
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  auto end_time = std::chrono::steady_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      end_time - start_time);
+
+  // 大部分操作应该成功
+  EXPECT_GT(successful_operations.load(), total_operations.load() * 0.8);
+
+  std::cout << "Stress test completed: " << successful_operations.load() << "/"
+            << total_operations.load() << " operations successful in "
+            << duration.count() << " ms" << std::endl;
 }

@@ -14,8 +14,13 @@ class ClientConnectionTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
     // 初始化日志系统
-    logger::Logger::Init("client_connection_test", "./logs",
-                         logger::LogLevel::INFO, 10, false);
+    logger::LogConfig config = logger::LogConfig::loadFromConfigManager();
+    config.log_directory = "./logs";
+    config.global_level = logger::LogLevel::INFO;
+    config.file_enabled = true;
+    config.console_enabled = false;
+    config.max_files = 10;
+    logger::Logger::Init("client_connection_test", config);
   }
 
   static void TearDownTestSuite() {

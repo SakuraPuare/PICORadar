@@ -57,40 +57,60 @@ auto read_pid_from_lockfile(const std::string& path) -> ProcessId {
 #ifdef _WIN32
 // --- Windows 实现 (带陈旧锁检测) ---
 SingleInstanceGuard::SingleInstanceGuard(const std::string& lock_file_name) {
-  lock_file_path_ = get_temp_dir_path() + "\\" + lock_file_name;
-
-  // 首先检查进程内是否已经有这个锁
-  {
-    std::lock_guard<std::mutex> lock(process_locks_mutex);
-    if (active_locks.find(lock_file_path_) != active_locks.end()) {
-      throw std::runtime_error(
-          "PICO Radar server is already running in this process.");
-    }
+  // 参数验证
+  if (lock_file_name.empty()) {
+    throw std::invalid_argument("Lock file name cannot be empty");
   }
 
+  // 检查并清理空白字符
+  std::string trimmed_name = lock_file_name;
+  // 移除前导和尾随空白字符
+  size_t first = trimmed_name.find_first_not_of(" \t\n\r");
+  if (first == std::string::npos) {
+    throw std::invalid_argument(
+        "Lock file name cannot contain only whitespace");
+  }
+  trimmed_name = trimmed_name.substr(first);
+  size_t last = trimmed_name.find_last_not_of(" \t\n\r");
+  trimmed_name = trimmed_name.substr(0, last + 1);
+
+  lock_file_path_ = get_temp_dir_path() + "\\" + trimmed_name;
+
   for (int i = 0; i < 2; ++i) {  // 最多重试一次
-    file_handle_ = CreateFileA(
-        lock_file_path_.c_str(), GENERIC_WRITE,
-        0,  // 独占访问
-        NULL, CREATE_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_DELETE_ON_CLOSE,  // 自动删除
-        NULL);
+    // 在关键区域内检查进程内锁和获取文件锁
+    {
+      std::lock_guard<std::mutex> process_lock(process_locks_mutex);
 
-    if (file_handle_ != INVALID_HANDLE_VALUE) {
-      // 成功获取锁
-      std::string pid_str = std::to_string(GetCurrentProcessId());
-      DWORD bytes_written;
-      WriteFile(file_handle_, pid_str.c_str(), pid_str.length(), &bytes_written,
-                NULL);
-
-      // 添加到进程内活动锁集合
-      {
-        std::lock_guard<std::mutex> lock(process_locks_mutex);
-        active_locks.insert(lock_file_path_);
+      // 检查进程内是否已经有这个锁
+      if (active_locks.find(lock_file_path_) != active_locks.end()) {
+        throw std::runtime_error(
+            "PICO Radar server is already running in this process.");
       }
 
-      return;  // 成功，退出构造函数
-    }
+      file_handle_ = CreateFileA(
+          lock_file_path_.c_str(), GENERIC_WRITE,
+          0,  // 独占访问
+          NULL, CREATE_ALWAYS,
+          FILE_ATTRIBUTE_NORMAL | FILE_FLAG_DELETE_ON_CLOSE,  // 自动删除
+          NULL);
+
+      if (file_handle_ != INVALID_HANDLE_VALUE) {
+        // 成功获取锁，立即添加到进程内活动锁集合
+        active_locks.insert(lock_file_path_);
+
+        // 写入 PID
+        std::string pid_str = std::to_string(GetCurrentProcessId());
+        DWORD bytes_written;
+        BOOL write_result = WriteFile(file_handle_, pid_str.c_str(),
+                                      static_cast<DWORD>(pid_str.length()),
+                                      &bytes_written, NULL);
+        if (write_result) {
+          FlushFileBuffers(file_handle_);  // 确保数据被写入磁盘
+        }
+
+        return;  // 成功，退出构造函数
+      }
+    }  // 释放进程锁
 
     // 如果获取锁失败
     if (GetLastError() != ERROR_SHARING_VIOLATION) {
@@ -127,49 +147,68 @@ SingleInstanceGuard::~SingleInstanceGuard() {
 #else
 // --- POSIX 实现 (带陈旧锁检测) ---
 SingleInstanceGuard::SingleInstanceGuard(const std::string& lock_file_name) {
-  lock_file_path_ = get_temp_dir_path() + "/" + lock_file_name;
-
-  // 首先检查进程内是否已经有这个锁
-  {
-    std::lock_guard<std::mutex> lock(process_locks_mutex);
-    if (active_locks.find(lock_file_path_) != active_locks.end()) {
-      throw std::runtime_error(
-          "PICO Radar server is already running in this process.");
-    }
+  // 参数验证
+  if (lock_file_name.empty()) {
+    throw std::invalid_argument("Lock file name cannot be empty");
   }
 
+  // 检查并清理空白字符
+  std::string trimmed_name = lock_file_name;
+  // 移除前导和尾随空白字符
+  size_t first = trimmed_name.find_first_not_of(" \t\n\r");
+  if (first == std::string::npos) {
+    throw std::invalid_argument(
+        "Lock file name cannot contain only whitespace");
+  }
+  trimmed_name = trimmed_name.substr(first);
+  size_t last = trimmed_name.find_last_not_of(" \t\n\r");
+  trimmed_name = trimmed_name.substr(0, last + 1);
+
+  lock_file_path_ = get_temp_dir_path() + "/" + trimmed_name;
+
   for (int i = 0; i < 2; ++i) {  // 最多重试一次
-    file_descriptor_ = open(lock_file_path_.c_str(), O_RDWR | O_CREAT, 0666);
-    if (file_descriptor_ < 0) {
-      throw std::system_error(errno, std::system_category(),
-                              "Failed to open lock file");
-    }
+    // 在关键区域内检查进程内锁和获取文件锁
+    {
+      std::lock_guard<std::mutex> process_lock(process_locks_mutex);
 
-    struct flock lock_info = {0};
-    lock_info.l_type = F_WRLCK;
-    lock_info.l_whence = SEEK_SET;
-    lock_info.l_start = 0;
-    lock_info.l_len = 0;
-
-    if (fcntl(file_descriptor_, F_SETLK, &lock_info) == 0) {
-      // 成功获取锁
-      const std::string pid_str = std::to_string(getpid());
-      if (ftruncate(file_descriptor_, 0) != 0) { /* ignore */
-      }
-      if (write(file_descriptor_, pid_str.c_str(), pid_str.length()) ==
-          -1) { /* ignore */
+      // 检查进程内是否已经有这个锁
+      if (active_locks.find(lock_file_path_) != active_locks.end()) {
+        throw std::runtime_error(
+            "PICO Radar server is already running in this process.");
       }
 
-      // 添加到进程内活动锁集合
-      {
-        std::lock_guard<std::mutex> lock(process_locks_mutex);
+      file_descriptor_ = open(lock_file_path_.c_str(), O_RDWR | O_CREAT, 0666);
+      if (file_descriptor_ < 0) {
+        throw std::system_error(errno, std::system_category(),
+                                "Failed to open lock file");
+      }
+
+      struct flock lock_info = {0};
+      lock_info.l_type = F_WRLCK;
+      lock_info.l_whence = SEEK_SET;
+      lock_info.l_start = 0;
+      lock_info.l_len = 0;
+
+      if (fcntl(file_descriptor_, F_SETLK, &lock_info) == 0) {
+        // 成功获取锁，立即添加到进程内活动锁集合
         active_locks.insert(lock_file_path_);
+
+        // 写入 PID
+        const std::string pid_str = std::to_string(getpid());
+        if (ftruncate(file_descriptor_, 0) != 0) { /* ignore */
+        }
+        ssize_t written =
+            write(file_descriptor_, pid_str.c_str(), pid_str.length());
+        if (written == -1) { /* ignore */
+        }
+        // 确保数据被写入磁盘
+        fsync(file_descriptor_);
+
+        return;  // 成功，退出构造函数
       }
+    }  // 释放进程锁
 
-      return;  // 成功，退出构造函数
-    }
-
-    // 如果获取锁失败
+    // 如果获取锁失败，在进程锁外处理
     if (errno != EWOULDBLOCK && errno != EAGAIN) {
       close(file_descriptor_);
       throw std::system_error(errno, std::system_category(),

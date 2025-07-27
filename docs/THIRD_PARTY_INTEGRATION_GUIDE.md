@@ -376,7 +376,7 @@ async def main():
     
     try:
         # 连接到服务器
-        await client.connect("127.0.0.1", 11451, "secure_production_token_change_me_2025", "python_player")
+        await client.connect("127.0.0.1", 11451, "pico_radar_secret_token", "python_player")
         
         # 发送位置数据
         for i in range(5):
@@ -536,7 +536,7 @@ async function main() {
     
     try {
         await client.loadProtoDefinitions();
-        await client.connect('127.0.0.1', 11451, 'secure_production_token_change_me_2025', 'js_player');
+        await client.connect('127.0.0.1', 11451, 'pico_radar_secret_token', 'js_player');
         
         // 发送位置数据
         for (let i = 0; i < 5; i++) {
@@ -567,7 +567,7 @@ main();
 ```json
 {
     "auth": {
-        "token": "secure_production_token_change_me_2025"
+        "token": "pico_radar_secret_token"
     }
 }
 ```
@@ -624,7 +624,6 @@ main();
 
 - **C++ 客户端示例**：`examples/client_example.cpp`
 - **官方客户端库**：`src/client/`
-- **Unreal Engine 插件**：`unreal/`
 
 ## 8. 参考文档
 

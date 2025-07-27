@@ -56,7 +56,7 @@ PICORadar 服务端现在支持两种运行模式：
 ### 内置命令
 - `status` - 显示详细的服务器状态
 - `connections` - 列出当前连接信息
-- `restart` - 重启服务器（待实现）
+- `restart` - 重启服务器
 - `help` - 显示帮助信息
 - `exit` / `quit` - 优雅关闭服务器
 

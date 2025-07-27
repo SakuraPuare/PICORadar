@@ -24,8 +24,13 @@ class ClientIntegrationTest : public testing::Test {
 
     // 初始化日志系统，允许失败
     try {
-      logger::Logger::Init("client_integration_test", "./logs",
-                           logger::LogLevel::INFO, 10, true);
+      logger::LogConfig config = logger::LogConfig::loadFromConfigManager();
+      config.log_directory = "./logs";
+      config.global_level = logger::LogLevel::INFO;
+      config.file_enabled = true;
+      config.console_enabled = true;
+      config.max_files = 10;
+      logger::Logger::Init("client_integration_test", config);
     } catch (const std::exception& e) {
       std::cerr << "Warning: Failed to initialize logger: " << e.what()
                 << std::endl;

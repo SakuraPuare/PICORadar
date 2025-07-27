@@ -10,8 +10,13 @@ using namespace picoradar;
 
 int main() {
   // 初始化日志系统
-  logger::Logger::Init("client_example", "./logs", logger::LogLevel::INFO, 10,
-                       true);
+  logger::LogConfig config = logger::LogConfig::loadFromConfigManager();
+  config.log_directory = "./logs";
+  config.global_level = logger::LogLevel::INFO;
+  config.file_enabled = true;
+  config.console_enabled = true;
+  config.max_files = 10;
+  logger::Logger::Init("client_example", config);
 
   std::cout << "=== PICORadar Client Library 使用示例 ===" << std::endl;
 

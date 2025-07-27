@@ -5,9 +5,13 @@
 
 auto main(int argc, char** argv) -> int {
   // 为所有测试统一初始化日志系统
-  // 日志将被重定向到 ./logs/tests 目录下的文件
-  logger::Logger::Init(argv[0], "./logs/tests", logger::LogLevel::DEBUG, 10,
-                       true);
+  logger::LogConfig config = logger::LogConfig::loadFromConfigManager();
+  config.log_directory = "./logs/tests";
+  config.global_level = logger::LogLevel::DEBUG;
+  config.file_enabled = true;
+  config.console_enabled = true;
+  config.max_files = 10;
+  logger::Logger::Init(argv[0], config);
 
   // 初始化 Google Test 框架
   testing::InitGoogleTest(&argc, argv);
