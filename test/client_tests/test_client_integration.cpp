@@ -164,15 +164,15 @@ TEST_F(ClientIntegrationTest, SendAndReceiveData) {
     data.set_scene_id("test_scene");
     
     auto* pos = data.mutable_position();
-    pos->set_x(1.0f);
-    pos->set_y(2.0f);
-    pos->set_z(3.0f);
+    pos->set_x(1.0F);
+    pos->set_y(2.0F);
+    pos->set_z(3.0F);
     
     auto* rot = data.mutable_rotation();
-    rot->set_x(0.0f);
-    rot->set_y(0.0f);
-    rot->set_z(0.0f);
-    rot->set_w(1.0f);
+    rot->set_x(0.0F);
+    rot->set_y(0.0F);
+    rot->set_z(0.0F);
+    rot->set_w(1.0F);
     
     data.set_timestamp(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count());

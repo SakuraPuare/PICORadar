@@ -47,15 +47,15 @@ int main() {
             // 设置位置（模拟移动）
             auto* pos = data.mutable_position();
             pos->set_x(static_cast<float>(i));
-            pos->set_y(0.0f);
-            pos->set_z(0.0f);
+            pos->set_y(0.0F);
+            pos->set_z(0.0F);
             
             // 设置旋转
             auto* rot = data.mutable_rotation();
-            rot->set_x(0.0f);
-            rot->set_y(0.0f);
-            rot->set_z(0.0f);
-            rot->set_w(1.0f);
+            rot->set_x(0.0F);
+            rot->set_y(0.0F);
+            rot->set_z(0.0F);
+            rot->set_w(1.0F);
             
             // 设置时间戳
             data.set_timestamp(std::chrono::duration_cast<std::chrono::milliseconds>(

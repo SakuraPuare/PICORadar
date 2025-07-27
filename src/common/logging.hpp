@@ -30,7 +30,7 @@ public:
                     bool log_to_stderr = false);
     
     // 获取单例
-    static Logger& GetInstance();
+    static auto GetInstance() -> Logger&;
 
     // 设置日志级别
     void SetLogLevel(LogLevel level);
@@ -43,7 +43,7 @@ public:
         ~LogStream();
         
         template<typename T>
-        LogStream& operator<<(const T& val) {
+        auto operator<<(const T& val) -> LogStream& {
             stream_ << val;
             return *this;
         }
@@ -63,7 +63,7 @@ public:
         ~LogStreamIf();
         
         template<typename T>
-        LogStreamIf& operator<<(const T& val) {
+        auto operator<<(const T& val) -> LogStreamIf& {
             if (condition_) {
                 stream_ << val;
             }
@@ -85,7 +85,7 @@ public:
     void Flush();
 
     // 获取当前日志级别
-    static LogLevel GetCurrentLogLevel();
+    static auto GetCurrentLogLevel() -> LogLevel;
     
 private:
     Logger();
