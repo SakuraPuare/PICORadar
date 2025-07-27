@@ -476,19 +476,22 @@ void Client::Impl::process_server_message(const std::string& message) {
 }
 
 void Client::Impl::do_write() {
-    std::lock_guard<std::mutex> lock(write_queue_mutex_);
+    std::string message;
     
-    if (write_in_progress_ || write_queue_.empty() || get_state() != ClientState::Connected) {
-        return;
-    }
+    // 使用作用域控制锁的生命周期
+    {
+        std::lock_guard<std::mutex> lock(write_queue_mutex_);
+        
+        if (write_in_progress_ || write_queue_.empty() || get_state() != ClientState::Connected) {
+            return;
+        }
+        
+        write_in_progress_ = true;
+        message = std::move(write_queue_.front());
+        write_queue_.pop();
+    } // 锁在这里自动释放
     
-    write_in_progress_ = true;
-    std::string message = std::move(write_queue_.front());
-    write_queue_.pop();
-    
-    // 释放锁后进行写操作
-    lock.~lock_guard();
-    
+    // 在锁释放后进行异步写操作
     ws_->async_write(
         net::buffer(message),
         [this](beast::error_code ec, std::size_t bytes_transferred) {

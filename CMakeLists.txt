@@ -12,6 +12,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ==============================================================================
+# 编译器警告设置
+# ==============================================================================
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(
+        -Wno-array-bounds          # 抑制 Boost.Asio 的数组边界警告
+        -Wno-cpp                   # 抑制 #warning 指令警告 (如 ciso646 弃用警告)
+    )
+endif()
+
+# ==============================================================================
 # 项目选项
 # ==============================================================================
 option(PICORADAR_BUILD_TESTS "构建测试" ON)

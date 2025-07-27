@@ -21,6 +21,9 @@
         "ratio": "cpp",
         "system_error": "cpp",
         "type_traits": "cpp",
-        "*.inc": "cpp"
+        "*.inc": "cpp",
+        "mutex": "cpp",
+        "shared_mutex": "cpp",
+        "syncstream": "cpp"
     }
 }
