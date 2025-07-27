@@ -1,5 +1,7 @@
 #include "logging.hpp"
 #include <glog/logging.h>
+#include <filesystem>
+#include <iostream>
 
 namespace logger {
 
@@ -25,6 +27,21 @@ void Logger::Init(const std::string& program_name,
                   bool log_to_stderr) {
     static std::once_flag once_flag;
     std::call_once(once_flag, [&]() {
+        // Create log directory if it doesn't exist
+        try {
+            std::filesystem::create_directories(log_dir);
+        } catch (const std::exception& e) {
+            std::cerr << "Warning: Failed to create log directory " << log_dir 
+                      << ": " << e.what() << ". Logging to stderr only." << std::endl;
+            // If we can't create the log directory, just log to stderr
+            google::InitGoogleLogging(program_name.c_str());
+            FLAGS_logtostderr = true;
+            FLAGS_log_prefix = true;
+            current_log_level_ = min_log_level;
+            google::SetStderrLogging(ToGlogSeverity(min_log_level));
+            return;
+        }
+        
         google::InitGoogleLogging(program_name.c_str());
         
         // Create log directory if it doesn't exist

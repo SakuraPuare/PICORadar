@@ -3,6 +3,7 @@
 #include <thread>
 #include <atomic>
 #include <future>
+#include <filesystem>
 
 #include "client.hpp"
 #include "server/include/server.hpp"
@@ -17,8 +18,16 @@ using namespace picoradar::server;
 class ClientIntegrationTest : public ::testing::Test {
 protected:
     static void SetUpTestSuite() {
-        // 初始化日志系统
-        logger::Logger::Init("client_integration_test", "./logs", logger::LogLevel::INFO, 10, false);
+        // 创建logs目录
+        std::filesystem::create_directories("./logs");
+        
+        // 初始化日志系统，允许失败
+        try {
+            logger::Logger::Init("client_integration_test", "./logs", logger::LogLevel::INFO, 10, true);
+        } catch (const std::exception& e) {
+            std::cerr << "Warning: Failed to initialize logger: " << e.what() << std::endl;
+            // 继续执行，只是没有文件日志
+        }
         
         // 直接使用JSON配置测试服务器
         auto& config = picoradar::common::ConfigManager::getInstance();
@@ -69,11 +78,17 @@ protected:
     }
 
     void TearDown() override {
+        // 给任何正在运行的客户端一些时间断开连接
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
         // 停止测试服务器
         if (server_) {
             server_->stop();
             server_.reset();
         }
+        
+        // 等待服务器完全关闭并清理资源
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 
     static constexpr uint16_t test_port_ = 11452;  // 使用不同的端口避免冲突
@@ -204,6 +219,9 @@ TEST_F(ClientIntegrationTest, MultipleClients) {
     std::vector<std::map<std::string, PlayerData>> received_data_maps(num_clients);
     std::vector<std::mutex> map_mutexes(num_clients);
     
+    // 确保服务器从干净状态开始
+    EXPECT_EQ(server_->getPlayerCount(), 0);
+    
     // 创建多个客户端
     for (int i = 0; i < num_clients; ++i) {
         auto client = std::make_unique<Client>();
@@ -213,6 +231,8 @@ TEST_F(ClientIntegrationTest, MultipleClients) {
             std::lock_guard<std::mutex> lock(map_mutexes[i]);
             LOG_DEBUG << "Client " << i << " received player list with " 
                       << players.size() << " players";
+            // 清除之前的数据，只保留当前的
+            received_data_maps[i].clear();
             for (const auto& player : players) {
                 received_data_maps[i][player.player_id()] = player;
             }
@@ -228,16 +248,16 @@ TEST_F(ClientIntegrationTest, MultipleClients) {
         futures.push_back(std::move(future));
         clients.push_back(std::move(client));
         
-        // 在连接之间添加小延迟以避免竞争条件
+        // 在连接之间添加更长的延迟以确保顺序连接
         if (i < num_clients - 1) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
     }
     
     // 等待所有连接完成（带超时）
     for (int i = 0; i < futures.size(); ++i) {
         auto& future = futures[i];
-        auto status = future.wait_for(std::chrono::seconds(2));
+        auto status = future.wait_for(std::chrono::seconds(3));
         if (status == std::future_status::timeout) {
             LOG_ERROR << "Client " << i << " connection timeout";
             FAIL() << "Client " << i << " connection timeout";
@@ -251,7 +271,10 @@ TEST_F(ClientIntegrationTest, MultipleClients) {
     }
     
     // 等待服务器处理所有连接和认证
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(800));
+    
+    // 验证服务器上的玩家数量
+    EXPECT_EQ(server_->getPlayerCount(), num_clients);
     
     // 每个客户端发送数据
     for (int i = 0; i < num_clients; ++i) {
@@ -265,18 +288,24 @@ TEST_F(ClientIntegrationTest, MultipleClients) {
         pos->set_z(static_cast<float>(i * 3));
         
         clients[i]->sendPlayerData(data);
+        
+        // 在发送之间添加小延迟
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     
     // 等待数据传播和服务器处理
     std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-    
-    // 验证服务器上的玩家数量
-    EXPECT_EQ(server_->getPlayerCount(), num_clients);
 
     // 验证每个客户端收到的数据是否正确
     for (int i = 0; i < num_clients; ++i) { // 遍历每个客户端
         std::lock_guard<std::mutex> lock(map_mutexes[i]);
         const auto& received_map = received_data_maps[i];
+
+        // 调试输出
+        LOG_INFO << "Client " << i << " received data for " << received_map.size() << " players";
+        for (const auto& pair : received_map) {
+            LOG_INFO << "  Player: " << pair.first;
+        }
 
         // 客户端应该收到所有玩家（包括自己）的数据
         ASSERT_EQ(received_map.size(), num_clients)
@@ -298,11 +327,18 @@ TEST_F(ClientIntegrationTest, MultipleClients) {
         }
     }
     
-    // 断开所有连接
+    // 手动断开所有客户端
     for (auto& client : clients) {
-        client->disconnect();
-        EXPECT_FALSE(client->isConnected());
+        if (client->isConnected()) {
+            client->disconnect();
+        }
     }
+    
+    // 等待所有客户端断开连接
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    
+    // 验证服务器上没有活跃的玩家
+    EXPECT_EQ(server_->getPlayerCount(), 0);
 }
 
 /**

@@ -318,6 +318,10 @@ TEST_F(IntegrationTest, ResourceCleanupScenario) {
   auto lock_file = config.getString("application.instance_lock");
   ASSERT_TRUE(lock_file.has_value());
 
+  // 确保锁文件在测试开始前不存在
+  std::string full_lock_path = std::string(std::getenv("TMPDIR") ? std::getenv("TMPDIR") : "/tmp") + "/" + lock_file.value();
+  std::filesystem::remove(full_lock_path);
+
   std::vector<ProcessId> process_pids;
 
   {
@@ -339,8 +343,14 @@ TEST_F(IntegrationTest, ResourceCleanupScenario) {
     // 离开作用域，资源应该被自动清理
   }
 
-  // 验证锁已被释放
-  EXPECT_NO_THROW({ SingleInstanceGuard new_guard(lock_file.value()); });
+  // 等待锁被完全释放
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // 验证锁已被释放 - 应该能够创建新的守护
+  EXPECT_NO_THROW({ 
+    SingleInstanceGuard new_guard(lock_file.value());
+    // 立即销毁以释放锁
+  });
 }
 
 /**
