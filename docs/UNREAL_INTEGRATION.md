@@ -71,7 +71,3 @@ RadarComponent->ConnectToServer(TEXT("127.0.0.1"), 8080);
 ## 贡献
 
 此插件是PICORadar项目的一部分。欢迎提交Issues和Pull Requests。
-
-## 许可证
-
-遵循主项目相同的许可证条款。
