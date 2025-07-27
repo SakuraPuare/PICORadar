@@ -31,23 +31,39 @@ runs:
     - name: Configure CMake with caching (Linux)
       if: inputs.os == 'Linux'
       run: |
-        cmake -G Ninja -B build -S . \
-          -DCMAKE_BUILD_TYPE=Debug \
-          ${{ inputs.enable_coverage == 'true' && '-DENABLE_COVERAGE=ON' || '' }} \
-          -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        if [ "${{ inputs.enable_coverage }}" = "true" ]; then
+          cmake --preset ci-debug
+        else
+          cmake --preset ci-release
+        fi
       shell: bash
 
     - name: Configure CMake (Windows)
       if: inputs.os == 'Windows'
       run: |
-        cmake -G Ninja -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
-      shell: cmd
+        if [ "${{ inputs.enable_coverage }}" = "true" ]; then
+          cmake --preset ci-debug-windows
+        else
+          cmake --preset ci-release-windows
+        fi
+      shell: bash
 
     - name: Build project
-      run: cmake --build build --config Debug --parallel
-      shell: ${{ inputs.os == 'Linux' && 'bash' || 'cmd' }}
+      run: |
+        if [ "${{ inputs.os }}" = "Linux" ]; then
+          if [ "${{ inputs.enable_coverage }}" = "true" ]; then
+            cmake --build --preset ci-debug --parallel
+          else
+            cmake --build --preset ci-release --parallel
+          fi
+        else
+          if [ "${{ inputs.enable_coverage }}" = "true" ]; then
+            cmake --build --preset ci-debug-windows --parallel
+          else
+            cmake --build --preset ci-release-windows --parallel
+          fi
+        fi
+      shell: bash
 
     - name: Show ccache statistics (Linux)
       if: inputs.os == 'Linux'

@@ -346,35 +346,6 @@ TEST_F(ClientIntegrationTest, MultipleClients) {
     }
 
     // 验证每个客户端收到的数据是否正确
-    for (int i = 0; i < num_clients; ++i) { // 遍历每个客户端
-        std::lock_guard<std::mutex> lock(map_mutexes[i]);
-        const auto& received_map = received_data_maps[i];
-
-        // 调试输出
-        LOG_INFO << "Client " << i << " received data for " << received_map.size() << " players";
-        for (const auto& pair : received_map) {
-            LOG_INFO << "  Player: " << pair.first 
-                     << " Scene: '" << pair.second.scene_id() << "'"
-                     << " Pos: (" << pair.second.position().x() 
-                     << "," << pair.second.position().y()
-                     << "," << pair.second.position().z() << ")";
-        }
-
-        // 客户端应该收到所有玩家（包括自己）的数据
-        ASSERT_EQ(received_map.size(), num_clients)
-            << "Client " << i << " expected to receive data for " << num_clients
-            << " players, but got " << received_map.size();
-
-        for (int j = 0; j < num_clients; ++j) { // 验证来自每个发送者的数据
-            std::string expected_player_id = "test_player_" + std::to_string(j);
-            auto it = received_map.find(expected_player_id);
-
-            ASSERT_NE(it, received_map.end())
-                << "Client " << i << " did not receive data for player " << expected_player_id;
-
-            const auto& data = it->second;
-            
-    // 验证每个客户端收到的数据是否正确
     int clients_with_complete_data = 0;
     
     for (int i = 0; i < num_clients; ++i) { // 遍历每个客户端

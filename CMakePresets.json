@@ -2,35 +2,99 @@
     "version": 2,
     "configurePresets": [
       {
-        "name": "vcpkg",
+        "name": "dev-debug",
+        "displayName": "本地开发 - Debug",
+        "description": "本地开发用的 Debug 配置，启用测试但不启用覆盖率",
         "generator": "Ninja",
-        "binaryDir": "${sourceDir}/build",
+        "binaryDir": "${sourceDir}/build/debug",
         "cacheVariables": {
-          "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-          "ENABLE_COVERAGE": "ON",
-          "CMAKE_CXX_FLAGS": "--coverage",
-          "CMAKE_C_FLAGS": "--coverage",
-          "CMAKE_BUILD_TYPE": "Debug"
+          "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+          "VCPKG_TARGET_TRIPLET": "x64-linux",
+          "CMAKE_BUILD_TYPE": "Debug",
+          "PICORADAR_BUILD_TESTS": "ON",
+          "PICORADAR_ENABLE_COVERAGE": "OFF"
         }
       },
       {
-        "name": "linux-x64",
-        "displayName": "Linux x64 Release",
+        "name": "dev-debug-coverage",
+        "displayName": "本地开发 - Debug + 覆盖率",
+        "description": "本地开发用的 Debug 配置，启用测试和覆盖率",
+        "generator": "Ninja",
+        "binaryDir": "${sourceDir}/build/coverage",
+        "cacheVariables": {
+          "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+          "VCPKG_TARGET_TRIPLET": "x64-linux",
+          "CMAKE_BUILD_TYPE": "Debug",
+          "PICORADAR_BUILD_TESTS": "ON",
+          "PICORADAR_ENABLE_COVERAGE": "ON"
+        }
+      },
+      {
+        "name": "ci-debug",
+        "displayName": "CI - Debug",
+        "description": "CI 用的 Debug 配置，用于测试",
+        "generator": "Ninja",
+        "binaryDir": "${sourceDir}/build",
+        "cacheVariables": {
+          "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+          "VCPKG_TARGET_TRIPLET": "x64-linux",
+          "CMAKE_BUILD_TYPE": "Debug",
+          "PICORADAR_BUILD_TESTS": "ON",
+          "PICORADAR_ENABLE_COVERAGE": "ON"
+        }
+      },
+      {
+        "name": "ci-release",
+        "displayName": "CI - Release (Linux)",
+        "description": "CI 用的 Release 配置，用于 Linux 发布构建",
         "generator": "Ninja",
         "binaryDir": "${sourceDir}/build",
         "cacheVariables": {
           "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
           "VCPKG_TARGET_TRIPLET": "x64-linux",
           "CMAKE_BUILD_TYPE": "Release",
-          "PICORADAR_BUILD_TESTS": "OFF",
+          "PICORADAR_BUILD_TESTS": "ON",
           "PICORADAR_ENABLE_COVERAGE": "OFF"
         }
       },
       {
-        "name": "windows-x64",
-        "displayName": "Windows x64 Cross-Compile",
+        "name": "ci-debug-windows",
+        "displayName": "CI - Debug (Windows)",
+        "description": "CI 用的 Debug 配置，用于 Windows 测试",
         "generator": "Ninja",
         "binaryDir": "${sourceDir}/build",
+        "cacheVariables": {
+          "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+          "VCPKG_TARGET_TRIPLET": "x64-windows",
+          "CMAKE_BUILD_TYPE": "Debug",
+          "PICORADAR_BUILD_TESTS": "ON",
+          "PICORADAR_ENABLE_COVERAGE": "OFF",
+          "_WIN32_WINNT": "0x0A00",
+          "CMAKE_CXX_FLAGS": "/bigobj"
+        }
+      },
+      {
+        "name": "ci-release-windows",
+        "displayName": "CI - Release (Windows)",
+        "description": "CI 用的 Release 配置，用于 Windows 发布构建",
+        "generator": "Ninja",
+        "binaryDir": "${sourceDir}/build",
+        "cacheVariables": {
+          "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+          "VCPKG_TARGET_TRIPLET": "x64-windows",
+          "CMAKE_BUILD_TYPE": "Release",
+          "PICORADAR_BUILD_TESTS": "ON",
+          "PICORADAR_ENABLE_COVERAGE": "OFF",
+          "_WIN32_WINNT": "0x0A00",
+          "CMAKE_CXX_FLAGS": "/bigobj"
+        }
+      },
+      {
+        "name": "cross-windows",
+        "displayName": "交叉编译 - Windows x64",
+        "description": "Linux 下交叉编译到 Windows",
+        "generator": "Ninja",
+        "binaryDir": "${sourceDir}/build/windows",
         "cacheVariables": {
           "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
           "VCPKG_TARGET_TRIPLET": "x64-windows",
@@ -41,10 +105,11 @@
         }
       },
       {
-        "name": "linux-x64-ue",
-        "displayName": "Linux x64 for UE Integration",
+        "name": "ue-linux",
+        "displayName": "UE集成 - Linux x64",
+        "description": "用于 Unreal Engine 集成的 Linux 构建",
         "generator": "Ninja",
-        "binaryDir": "${sourceDir}/build",
+        "binaryDir": "${sourceDir}/build/ue-linux",
         "cacheVariables": {
           "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
           "VCPKG_TARGET_TRIPLET": "x64-linux",
@@ -57,10 +122,11 @@
         }
       },
       {
-        "name": "windows-x64-ue",
-        "displayName": "Windows x64 for UE Integration",
+        "name": "ue-windows",
+        "displayName": "UE集成 - Windows x64", 
+        "description": "用于 Unreal Engine 集成的 Windows 构建",
         "generator": "Ninja",
-        "binaryDir": "${sourceDir}/build",
+        "binaryDir": "${sourceDir}/build/ue-windows",
         "cacheVariables": {
           "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
           "VCPKG_TARGET_TRIPLET": "x64-windows",
@@ -75,20 +141,49 @@
     ],
     "buildPresets": [
       {
-        "name": "linux-x64",
-        "configurePreset": "linux-x64"
+        "name": "dev-debug",
+        "displayName": "本地开发 - Debug",
+        "configurePreset": "dev-debug"
       },
       {
-        "name": "windows-x64",
-        "configurePreset": "windows-x64"
+        "name": "dev-debug-coverage",
+        "displayName": "本地开发 - Debug + 覆盖率",
+        "configurePreset": "dev-debug-coverage"
       },
       {
-        "name": "linux-x64-ue",
-        "configurePreset": "linux-x64-ue"
+        "name": "ci-debug",
+        "displayName": "CI - Debug",
+        "configurePreset": "ci-debug"
       },
       {
-        "name": "windows-x64-ue",
-        "configurePreset": "windows-x64-ue"
+        "name": "ci-release",
+        "displayName": "CI - Release (Linux)",
+        "configurePreset": "ci-release"
+      },
+      {
+        "name": "ci-debug-windows",
+        "displayName": "CI - Debug (Windows)",
+        "configurePreset": "ci-debug-windows"
+      },
+      {
+        "name": "ci-release-windows",
+        "displayName": "CI - Release (Windows)", 
+        "configurePreset": "ci-release-windows"
+      },
+      {
+        "name": "cross-windows",
+        "displayName": "交叉编译 - Windows",
+        "configurePreset": "cross-windows"
+      },
+      {
+        "name": "ue-linux",
+        "displayName": "UE集成 - Linux",
+        "configurePreset": "ue-linux"
+      },
+      {
+        "name": "ue-windows",
+        "displayName": "UE集成 - Windows",
+        "configurePreset": "ue-windows"
       }
     ]
   }

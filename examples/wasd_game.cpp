@@ -1,8 +1,13 @@
-#include <fcntl.h>
-#include <csignal>
-#include <termios.h>
-#include <unistd.h>
+#ifdef _WIN32
+    #include <windows.h>
+    #include <conio.h>
+#else
+    #include <fcntl.h>
+    #include <termios.h>
+    #include <unistd.h>
+#endif
 
+#include <csignal>
 #include <atomic>
 #include <cctype>
 #include <chrono>
@@ -33,7 +38,9 @@ std::map<std::string, PlayerData> g_other_players;
 std::mutex g_players_mutex;
 
 // 终端控制相关
+#ifndef _WIN32
 struct termios g_old_tio;
+#endif
 
 // 信号处理函数
 void signal_handler(int signal) {
@@ -44,6 +51,13 @@ void signal_handler(int signal) {
 
 // 设置终端为非阻塞输入模式
 void setup_terminal() {
+#ifdef _WIN32
+  // Windows: 设置控制台模式
+  HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);
+  DWORD mode = 0;
+  GetConsoleMode(hInput, &mode);
+  SetConsoleMode(hInput, mode & ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT));
+#else
   struct termios new_tio;
 
   // 获取当前终端设置并修改
@@ -59,10 +73,21 @@ void setup_terminal() {
   // 设置标准输入为非阻塞
   int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
   fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+#endif
 }
 
 // 恢复终端设置
-void restore_terminal() { tcsetattr(STDIN_FILENO, TCSANOW, &g_old_tio); }
+void restore_terminal() { 
+#ifdef _WIN32
+  // Windows: 恢复控制台模式
+  HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);
+  DWORD mode = 0;
+  GetConsoleMode(hInput, &mode);
+  SetConsoleMode(hInput, mode | ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT);
+#else
+  tcsetattr(STDIN_FILENO, TCSANOW, &g_old_tio);
+#endif
+}
 
 // 清屏和移动光标到顶部
 void clear_screen() { std::cout << "\033[2J\033[1;1H" << std::flush; }
@@ -213,7 +238,14 @@ void handle_input() {
   const float move_speed = 1.0F;
   char ch;
 
+#ifdef _WIN32
+  // Windows: 使用 _kbhit() 和 _getch()
+  while (_kbhit()) {
+    ch = _getch();
+#else
+  // Linux/Unix: 使用 read()
   while (read(STDIN_FILENO, &ch, 1) > 0) {
+#endif
     switch (ch) {
       case 'w':
       case 'W':
@@ -306,7 +338,9 @@ auto main(int argc, char* argv[]) -> int {
   g_current_player_name = username;  // 设置全局变量
 
   // 现在保存当前终端设置，然后设置为游戏模式
+#ifndef _WIN32
   tcgetattr(STDIN_FILENO, &g_old_tio);
+#endif
   setup_terminal();
   hide_cursor();
 

@@ -20,20 +20,22 @@ target_include_directories(client_example
         "${CMAKE_SOURCE_DIR}/src"
 )
 
-# WASD Game example
-add_executable(wasd_game
-    wasd_game.cpp
-)
+# WASD Game example (Linux only due to termios.h dependency)
+if(NOT WIN32)
+    add_executable(wasd_game
+        wasd_game.cpp
+    )
 
-target_link_libraries(wasd_game
-    PRIVATE
-        client_lib
-        common_lib
-        glog::glog
-)
+    target_link_libraries(wasd_game
+        PRIVATE
+            client_lib
+            common_lib
+            glog::glog
+    )
 
-target_include_directories(wasd_game
-    PRIVATE
-        "${CMAKE_SOURCE_DIR}/src/client/include"
-        "${CMAKE_SOURCE_DIR}/src"
-)
+    target_include_directories(wasd_game
+        PRIVATE
+            "${CMAKE_SOURCE_DIR}/src/client/include"
+            "${CMAKE_SOURCE_DIR}/src"
+    )
+endif()

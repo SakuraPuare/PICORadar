@@ -21,6 +21,24 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
     )
 endif()
 
+# Windows 特定设置
+if(WIN32)
+    # 定义 Windows API 版本 (Windows 10/11)
+    add_compile_definitions(
+        _WIN32_WINNT=0x0A00     # Windows 10/11
+        WIN32_LEAN_AND_MEAN     # 减少 Windows 头文件包含
+        NOMINMAX                # 防止 Windows.h 定义 min/max 宏
+    )
+    
+    # MSVC 特定设置
+    if(MSVC)
+        add_compile_options(
+            /bigobj                 # 支持大型对象文件
+            /utf-8                  # 使用 UTF-8 编码
+        )
+    endif()
+endif()
+
 # ==============================================================================
 # 项目选项
 # ==============================================================================
