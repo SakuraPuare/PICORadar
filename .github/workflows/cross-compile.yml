@@ -1,0 +1,104 @@
+name: Cross-Platform Compilation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  cross-compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: "Linux x64"
+            triplet: "x64-linux"
+            cmake_preset: "linux-x64"
+            output_suffix: "linux-x64"
+          - name: "Windows x64"
+            triplet: "x64-windows"
+            cmake_preset: "windows-x64"
+            output_suffix: "windows-x64"
+            cross_compile: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Install cross-compilation tools (Windows)
+        if: matrix.target.cross_compile
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-mingw-w64-x86-64 \
+            g++-mingw-w64-x86-64 \
+            wine64
+
+      - name: Setup vcpkg
+        run: |
+          git clone https://github.com/Microsoft/vcpkg.git vcpkg
+          ./vcpkg/bootstrap-vcpkg.sh
+          
+      - name: Install dependencies
+        run: |
+          ./vcpkg/vcpkg install --triplet ${{ matrix.target.triplet }}
+
+      - name: Configure CMake
+        run: |
+          cmake --preset ${{ matrix.target.cmake_preset }}
+
+      - name: Build
+        run: |
+          cmake --build build --config Release
+
+      - name: Package artifacts
+        run: |
+          mkdir -p artifacts/${{ matrix.target.output_suffix }}
+          
+          # 复制可执行文件
+          if [ "${{ matrix.target.cross_compile }}" = "true" ]; then
+            find build -name "*.exe" -type f -exec cp {} artifacts/${{ matrix.target.output_suffix }}/ \;
+            find build -name "*.dll" -type f -exec cp {} artifacts/${{ matrix.target.output_suffix }}/ \;
+          else
+            find build -executable -type f -not -path "*/CMakeFiles/*" -exec cp {} artifacts/${{ matrix.target.output_suffix }}/ \;
+            find build -name "*.so" -type f -exec cp {} artifacts/${{ matrix.target.output_suffix }}/ \;
+          fi
+          
+          # 复制配置文件
+          cp -r config artifacts/${{ matrix.target.output_suffix }}/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: picoradar-${{ matrix.target.output_suffix }}
+          path: artifacts/${{ matrix.target.output_suffix }}
+
+  create-release:
+    needs: cross-compile
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Create release package
+        run: |
+          cd release-artifacts
+          for dir in */; do
+            if [ -d "$dir" ]; then
+              tar -czf "${dir%/}.tar.gz" "$dir"
+            fi
+          done
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: picoradar-release-packages
+          path: release-artifacts/*.tar.gz

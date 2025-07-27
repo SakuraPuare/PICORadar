@@ -12,6 +12,83 @@
           "CMAKE_C_FLAGS": "--coverage",
           "CMAKE_BUILD_TYPE": "Debug"
         }
+      },
+      {
+        "name": "linux-x64",
+        "displayName": "Linux x64 Release",
+        "generator": "Ninja",
+        "binaryDir": "${sourceDir}/build",
+        "cacheVariables": {
+          "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+          "VCPKG_TARGET_TRIPLET": "x64-linux",
+          "CMAKE_BUILD_TYPE": "Release",
+          "PICORADAR_BUILD_TESTS": "OFF",
+          "PICORADAR_ENABLE_COVERAGE": "OFF"
+        }
+      },
+      {
+        "name": "windows-x64",
+        "displayName": "Windows x64 Cross-Compile",
+        "generator": "Ninja",
+        "binaryDir": "${sourceDir}/build",
+        "cacheVariables": {
+          "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+          "VCPKG_TARGET_TRIPLET": "x64-windows",
+          "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/mingw-w64.cmake",
+          "CMAKE_BUILD_TYPE": "Release",
+          "PICORADAR_BUILD_TESTS": "OFF",
+          "PICORADAR_ENABLE_COVERAGE": "OFF"
+        }
+      },
+      {
+        "name": "linux-x64-ue",
+        "displayName": "Linux x64 for UE Integration",
+        "generator": "Ninja",
+        "binaryDir": "${sourceDir}/build",
+        "cacheVariables": {
+          "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+          "VCPKG_TARGET_TRIPLET": "x64-linux",
+          "CMAKE_BUILD_TYPE": "Release",
+          "PICORADAR_BUILD_TESTS": "OFF",
+          "PICORADAR_ENABLE_COVERAGE": "OFF",
+          "BUILD_SHARED_LIBS": "OFF",
+          "CMAKE_POSITION_INDEPENDENT_CODE": "ON",
+          "CMAKE_CXX_FLAGS": "-fPIC -fvisibility=hidden"
+        }
+      },
+      {
+        "name": "windows-x64-ue",
+        "displayName": "Windows x64 for UE Integration",
+        "generator": "Ninja",
+        "binaryDir": "${sourceDir}/build",
+        "cacheVariables": {
+          "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+          "VCPKG_TARGET_TRIPLET": "x64-windows",
+          "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/mingw-w64.cmake",
+          "CMAKE_BUILD_TYPE": "Release",
+          "PICORADAR_BUILD_TESTS": "OFF",
+          "PICORADAR_ENABLE_COVERAGE": "OFF",
+          "BUILD_SHARED_LIBS": "OFF",
+          "CMAKE_CXX_FLAGS": "-fvisibility=hidden -static-libgcc -static-libstdc++"
+        }
+      }
+    ],
+    "buildPresets": [
+      {
+        "name": "linux-x64",
+        "configurePreset": "linux-x64"
+      },
+      {
+        "name": "windows-x64",
+        "configurePreset": "windows-x64"
+      },
+      {
+        "name": "linux-x64-ue",
+        "configurePreset": "linux-x64-ue"
+      },
+      {
+        "name": "windows-x64-ue",
+        "configurePreset": "windows-x64-ue"
       }
     ]
   }
