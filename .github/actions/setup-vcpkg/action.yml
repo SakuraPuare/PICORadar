@@ -11,17 +11,21 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    # 设置 vcpkg 环境变量以启用二进制缓存
-    - name: Setup vcpkg environment
+    # 设置 vcpkg 环境变量以启用二进制缓存 (Linux)
+    - name: Setup vcpkg environment (Linux)
+      if: inputs.os == 'Linux'
       run: |
-        if [ "${{ runner.os }}" = "Linux" ]; then
-          echo "VCPKG_DEFAULT_BINARY_CACHE=$HOME/.cache/vcpkg/archives" >> $GITHUB_ENV
-          mkdir -p $HOME/.cache/vcpkg/archives
-        else
-          echo "VCPKG_DEFAULT_BINARY_CACHE=C:\vcpkg\archives" >> $GITHUB_ENV
-          mkdir -p C:\vcpkg\archives
-        fi
+        echo "VCPKG_DEFAULT_BINARY_CACHE=$HOME/.cache/vcpkg/archives" >> $GITHUB_ENV
+        mkdir -p $HOME/.cache/vcpkg/archives
       shell: bash
+
+    # 设置 vcpkg 环境变量以启用二进制缓存 (Windows)  
+    - name: Setup vcpkg environment (Windows)
+      if: inputs.os == 'Windows'
+      run: |
+        echo "VCPKG_DEFAULT_BINARY_CACHE=C:\vcpkg\archives" >> $env:GITHUB_ENV
+        New-Item -ItemType Directory -Force -Path "C:\vcpkg\archives"
+      shell: powershell
 
     - name: Bootstrap vcpkg (Linux)
       if: inputs.os == 'Linux'
@@ -39,12 +43,16 @@ runs:
         }
       shell: powershell
 
-    # 使用 manifest 模式和二进制缓存
-    - name: Install vcpkg dependencies with binary caching
+    # 使用 manifest 模式和二进制缓存 (Linux)
+    - name: Install vcpkg dependencies with binary caching (Linux)
+      if: inputs.os == 'Linux'
       run: |
-        if [ "${{ runner.os }}" = "Linux" ]; then
-          ./vcpkg/vcpkg install --triplet ${{ inputs.triplet }} --binarysource=clear --binarysource=files,$HOME/.cache/vcpkg/archives,readwrite
-        else
-          .\vcpkg\vcpkg.exe install --triplet ${{ inputs.triplet }} --binarysource=clear --binarysource=files,C:\vcpkg\archives,readwrite
-        fi
+        ./vcpkg/vcpkg install --triplet ${{ inputs.triplet }} --binarysource=clear --binarysource=files,$HOME/.cache/vcpkg/archives,readwrite
       shell: bash
+
+    # 使用 manifest 模式和二进制缓存 (Windows)
+    - name: Install vcpkg dependencies with binary caching (Windows)
+      if: inputs.os == 'Windows'
+      run: |
+        .\vcpkg\vcpkg.exe install --triplet ${{ inputs.triplet }} --binarysource=clear --binarysource=files,C:\vcpkg\archives,readwrite
+      shell: powershell
