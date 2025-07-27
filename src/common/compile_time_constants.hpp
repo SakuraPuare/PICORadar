@@ -3,7 +3,7 @@
 /**
  * @file compile_time_constants.hpp
  * @brief 编译时常量定义
- * 
+ *
  * 这个文件包含项目中使用的编译时常量，
  * 用于集中管理配置参数和避免硬编码数值。
  */
@@ -41,4 +41,4 @@ constexpr int kMaxThreadCount = 16;
 constexpr auto kDiscoveryBroadcastInterval = std::chrono::milliseconds(5000);
 constexpr auto kDiscoveryTimeout = std::chrono::milliseconds(10000);
 
-} // namespace picoradar::constants
+}  // namespace picoradar::constants

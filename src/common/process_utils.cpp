@@ -1,5 +1,6 @@
 #include "process_utils.hpp"
 
+#include <array>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -13,7 +14,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <csignal>
 #include <cstring>
 #endif
 
@@ -117,8 +117,8 @@ auto Process::waitForExit() -> std::optional<int> {
 #else  // POSIX implementation
 Process::Process(const std::string& executable_path,
                  const std::vector<std::string>& args) {
-  int pipefd[2];
-  if (pipe(pipefd) == -1) {
+  std::array<int, 2> pipefd;
+  if (pipe(pipefd.data()) == -1) {
     LOG_ERROR << "pipe() failed.";
     throw std::runtime_error("Failed to create pipe for process creation");
   }
@@ -145,7 +145,7 @@ Process::Process(const std::string& executable_path,
 
     execv(executable_path.c_str(), c_args.data());
     // If execv returns, it's an error
-    int error_code = errno;
+    const int error_code = errno;
     (void)write(pipefd[1], &error_code, sizeof(error_code));
     close(pipefd[1]);
     _exit(127);  // Standard exit code for command not found/failed exec
@@ -154,7 +154,7 @@ Process::Process(const std::string& executable_path,
   close(pipefd[1]);  // Close write end in parent
 
   int error_code = 0;
-  ssize_t bytes_read = read(pipefd[0], &error_code, sizeof(error_code));
+  const ssize_t bytes_read = read(pipefd[0], &error_code, sizeof(error_code));
   close(pipefd[0]);
 
   if (bytes_read > 0) {

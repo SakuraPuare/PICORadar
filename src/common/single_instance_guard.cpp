@@ -108,9 +108,15 @@ SingleInstanceGuard::SingleInstanceGuard(const std::string& lock_file_name) {
                               "Failed to open lock file");
     }
 
-    if (flock(file_descriptor_, LOCK_EX | LOCK_NB) == 0) {
+    struct flock lock_info = {0};
+    lock_info.l_type = F_WRLCK;
+    lock_info.l_whence = SEEK_SET;
+    lock_info.l_start = 0;
+    lock_info.l_len = 0;
+
+    if (fcntl(file_descriptor_, F_SETLK, &lock_info) == 0) {
       // 成功获取锁
-      std::string pid_str = std::to_string(getpid());
+      const std::string pid_str = std::to_string(getpid());
       if (ftruncate(file_descriptor_, 0) != 0) { /* ignore */
       }
       if (write(file_descriptor_, pid_str.c_str(), pid_str.length()) ==
@@ -127,15 +133,13 @@ SingleInstanceGuard::SingleInstanceGuard(const std::string& lock_file_name) {
     }
 
     // 文件已被锁定，检查PID是否为陈旧的
-    ProcessId pid = read_pid_from_lockfile(lock_file_path_);
+    const ProcessId pid = read_pid_from_lockfile(lock_file_path_);
     close(file_descriptor_);  // 关闭当前句柄，因为我们没有获得锁
 
     if (pid > 0 && !is_process_running(pid)) {
       // 进程不存在，是陈旧锁
       unlink(lock_file_path_.c_str());  // 删除它然后重试
-      continue;
     }
-
   }
   // 进程仍在运行
   throw std::runtime_error("PICO Radar server is already running.");
@@ -143,7 +147,12 @@ SingleInstanceGuard::SingleInstanceGuard(const std::string& lock_file_name) {
 
 SingleInstanceGuard::~SingleInstanceGuard() {
   if (file_descriptor_ != -1) {
-    flock(file_descriptor_, LOCK_UN);
+    struct flock lock_info = {0};
+    lock_info.l_type = F_UNLCK;
+    lock_info.l_whence = SEEK_SET;
+    lock_info.l_start = 0;
+    lock_info.l_len = 0;
+    fcntl(file_descriptor_, F_SETLK, &lock_info);
     close(file_descriptor_);
     unlink(lock_file_path_.c_str());
   }

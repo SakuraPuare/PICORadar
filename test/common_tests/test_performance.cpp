@@ -17,7 +17,7 @@
 using namespace picoradar::common;
 using namespace std::chrono;
 
-class PerformanceTest : public ::testing::Test {
+class PerformanceTest : public testing::Test {
  protected:
   void SetUp() override {
     temp_dir_ = std::filesystem::temp_directory_path() / "picoradar_perf_test";
@@ -101,8 +101,8 @@ TEST_F(PerformanceTest, ConfigManagerConcurrentReadPerformance) {
   auto result = config.loadFromFile(config_file.string());
   EXPECT_TRUE(result.has_value());
 
-  const int num_threads = 10;
-  const int reads_per_thread = 1000;
+  constexpr int num_threads = 10;
+  constexpr int reads_per_thread = 1000;
   std::vector<std::thread> threads;
   std::atomic<int> total_operations{0};
 
@@ -111,14 +111,14 @@ TEST_F(PerformanceTest, ConfigManagerConcurrentReadPerformance) {
   // 启动多个线程同时读取
   threads.reserve(num_threads);
   for (int i = 0; i < num_threads; ++i) {
-    threads.emplace_back([&config, &total_operations, reads_per_thread]() {
+    threads.emplace_back([&config, &total_operations, reads_per_thread] {
       for (int j = 0; j < reads_per_thread; ++j) {
         auto str_val = config.getString("test_string");
         auto int_val = config.getInt("test_int");
         auto bool_val = config.getBool("test_bool");
-        auto nested_val = config.getString("nested.deep_value");
 
-        if (str_val.has_value() && int_val.has_value() &&
+        if (auto nested_val = config.getString("nested.deep_value");
+            str_val.has_value() && int_val.has_value() &&
             bool_val.has_value() && nested_val.has_value()) {
           total_operations.fetch_add(1);
         }
@@ -132,7 +132,7 @@ TEST_F(PerformanceTest, ConfigManagerConcurrentReadPerformance) {
   }
 
   auto end = high_resolution_clock::now();
-  auto duration = duration_cast<milliseconds>(end - start);
+  const auto duration = duration_cast<milliseconds>(end - start);
 
   EXPECT_EQ(total_operations.load(), num_threads * reads_per_thread);
   LOG_INFO << "Concurrent reads (" << num_threads << " threads, "
@@ -140,7 +140,7 @@ TEST_F(PerformanceTest, ConfigManagerConcurrentReadPerformance) {
            << "ms";
 
   // 计算每秒操作数
-  double ops_per_second = (total_operations.load() * 1000.0) / duration.count();
+  double ops_per_second = total_operations.load() * 1000.0 / duration.count();
   LOG_INFO << "Operations per second: " << ops_per_second;
   EXPECT_GT(ops_per_second, 10000);  // 期望每秒至少10000次操作
 }
@@ -149,7 +149,7 @@ TEST_F(PerformanceTest, ConfigManagerConcurrentReadPerformance) {
  * @brief 测试SingleInstanceGuard的创建和销毁性能
  */
 TEST_F(PerformanceTest, SingleInstanceGuardPerformance) {
-  const int num_iterations = 100;
+  constexpr int num_iterations = 100;
   std::vector<duration<double, std::milli>> durations;
 
   for (int i = 0; i < num_iterations; ++i) {
@@ -180,7 +180,7 @@ TEST_F(PerformanceTest, SingleInstanceGuardPerformance) {
     max_time = std::max(max_time, d.count());
   }
 
-  double avg_time = total_time / num_iterations;
+  const double avg_time = total_time / num_iterations;
 
   LOG_INFO << "SingleInstanceGuard performance (" << num_iterations
            << " iterations):";
@@ -208,10 +208,11 @@ TEST_F(PerformanceTest, ProcessCreationPerformance) {
 
   // 如果 sleep 命令不存在，跳过测试
   if (!std::filesystem::exists(test_command)) {
-    GTEST_SKIP() << "Sleep command not found at " << test_command << ", skipping performance test";
+    GTEST_SKIP() << "Sleep command not found at " << test_command
+                 << ", skipping performance test";
   }
 
-  const int num_processes = 6; // 减少进程数量以提高CI稳定性
+  constexpr int num_processes = 6;  // 减少进程数量以提高CI稳定性
   std::vector<duration<double, std::milli>> creation_times;
   std::vector<duration<double, std::milli>> termination_times;
 
@@ -220,14 +221,14 @@ TEST_F(PerformanceTest, ProcessCreationPerformance) {
       // 测试进程创建时间
       auto start = high_resolution_clock::now();
 #ifdef _WIN32
-      Process process(test_command, {"1"}); // timeout 1 second
+      Process process(test_command, {"1"});  // timeout 1 second
 #else
-      Process process(test_command, {"0.1"}); // sleep 0.1 seconds
+      Process process(test_command, {"0.1"});  // sleep 0.1 seconds
 #endif
       auto creation_end = high_resolution_clock::now();
 
       // 等待进程启动
-      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      std::this_thread::sleep_for(milliseconds(20));
       EXPECT_TRUE(process.isRunning());
 
       // 测试进程终止时间
@@ -273,9 +274,8 @@ TEST_F(PerformanceTest, ProcessCreationPerformance) {
  * @brief 测试is_process_running函数的性能
  */
 TEST_F(PerformanceTest, IsProcessRunningPerformance) {
-  const int num_checks = 10000;
-  ProcessId current_pid = getpid();
-  ProcessId invalid_pid = 999999;
+  constexpr int num_checks = 10000;
+  const ProcessId current_pid = getpid();
 
   // 测试有效PID检查性能
   auto start = high_resolution_clock::now();
@@ -285,25 +285,27 @@ TEST_F(PerformanceTest, IsProcessRunningPerformance) {
   }
   auto end = high_resolution_clock::now();
 
-  auto valid_duration = duration_cast<microseconds>(end - start);
+  const auto valid_duration = duration_cast<microseconds>(end - start);
   LOG_INFO << "Valid PID checks (" << num_checks
            << "): " << valid_duration.count() << "μs";
 
   // 测试无效PID检查性能
   start = high_resolution_clock::now();
   for (int i = 0; i < num_checks; ++i) {
-    bool running = is_process_running(invalid_pid);
+    constexpr ProcessId invalid_pid = 999999;
+    const bool running = is_process_running(invalid_pid);
     EXPECT_FALSE(running);
   }
   end = high_resolution_clock::now();
 
-  auto invalid_duration = duration_cast<microseconds>(end - start);
+  const auto invalid_duration = duration_cast<microseconds>(end - start);
   LOG_INFO << "Invalid PID checks (" << num_checks
            << "): " << invalid_duration.count() << "μs";
 
   // 性能断言 - 每次检查应该很快
-  double avg_valid = valid_duration.count() / static_cast<double>(num_checks);
-  double avg_invalid =
+  const double avg_valid =
+      valid_duration.count() / static_cast<double>(num_checks);
+  const double avg_invalid =
       invalid_duration.count() / static_cast<double>(num_checks);
 
   LOG_INFO << "Average time per valid PID check: " << avg_valid << "μs";
@@ -342,26 +344,26 @@ TEST_F(PerformanceTest, IntegratedStressTest) {
 
   threads.reserve(num_threads);
   for (int i = 0; i < num_threads; ++i) {
-    threads.emplace_back([&, i]() {
+    threads.emplace_back([&, i] {
       for (int j = 0; j < operations; ++j) {
         try {
           // 配置读取操作
-          auto stress_flag = config.getBool("stress_test");
-          if (!stress_flag.has_value() || !stress_flag.value()) {
+          if (auto stress_flag = config.getBool("stress_test");
+              !stress_flag.has_value() || !stress_flag.value()) {
             failed_operations.fetch_add(1);
             continue;
           }
 
           // 锁操作
-          std::string lock_name =
-              "stress_lock_" + std::to_string(i) + "_" + std::to_string(j);
           {
+            std::string lock_name =
+                "stress_lock_" + std::to_string(i) + "_" + std::to_string(j);
             SingleInstanceGuard guard(lock_name);
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
+            std::this_thread::sleep_for(microseconds(100));
           }
 
           // PID检查操作
-          ProcessId current = getpid();
+          const ProcessId current = getpid();
           if (!is_process_running(current)) {
             failed_operations.fetch_add(1);
             continue;
@@ -369,7 +371,7 @@ TEST_F(PerformanceTest, IntegratedStressTest) {
 
           successful_operations.fetch_add(1);
 
-        } catch (const std::exception& e) {
+        } catch (const std::exception&) {
           failed_operations.fetch_add(1);
         }
       }
@@ -382,7 +384,7 @@ TEST_F(PerformanceTest, IntegratedStressTest) {
   }
 
   auto end = high_resolution_clock::now();
-  auto duration = duration_cast<milliseconds>(end - start);
+  const auto duration = duration_cast<milliseconds>(end - start);
 
   int total_expected = num_threads * operations;
   int total_actual = successful_operations.load() + failed_operations.load();
@@ -393,7 +395,7 @@ TEST_F(PerformanceTest, IntegratedStressTest) {
   LOG_INFO << "  Failed operations: " << failed_operations.load();
   LOG_INFO << "  Total time: " << duration.count() << "ms";
   LOG_INFO << "  Operations per second: "
-           << (successful_operations.load() * 1000.0) / duration.count();
+           << successful_operations.load() * 1000.0 / duration.count();
 
   EXPECT_EQ(total_actual, total_expected);
   EXPECT_GT(successful_operations.load(),

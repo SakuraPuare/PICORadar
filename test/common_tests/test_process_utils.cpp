@@ -11,7 +11,7 @@
 
 using namespace picoradar::common;
 
-class ProcessUtilsTest : public ::testing::Test {
+class ProcessUtilsTest : public testing::Test {
  protected:
   void SetUp() override {
     // 创建测试可执行文件路径
@@ -31,7 +31,7 @@ class ProcessUtilsTest : public ::testing::Test {
     }
   }
 
-  void createTestScript() {
+  void createTestScript() const {
     std::ofstream script(test_script_path_);
     script << "#!/bin/bash\n";
     script << "if [ \"$1\" = \"--sleep\" ]; then\n";
@@ -64,11 +64,11 @@ class ProcessUtilsTest : public ::testing::Test {
  */
 TEST_F(ProcessUtilsTest, IsProcessRunningFunction) {
   // 测试当前进程（肯定在运行）
-  ProcessId current_pid = getpid();
+  const ProcessId current_pid = getpid();
   EXPECT_TRUE(is_process_running(current_pid));
 
   // 测试一个几乎不可能存在的PID
-  ProcessId invalid_pid = 999999;
+  constexpr ProcessId invalid_pid = 999999;
   EXPECT_FALSE(is_process_running(invalid_pid));
 
   // 测试PID 0（通常是内核进程或无效）
@@ -86,7 +86,7 @@ TEST_F(ProcessUtilsTest, BasicProcessStartAndRunning) {
   EXPECT_TRUE(process.isRunning());
 
   // 等待进程结束
-  auto exit_code = process.waitForExit();
+  const auto exit_code = process.waitForExit();
   EXPECT_TRUE(exit_code.has_value());
   EXPECT_EQ(exit_code.value(), 0);
 
@@ -105,14 +105,14 @@ TEST_F(ProcessUtilsTest, ProcessTermination) {
   EXPECT_TRUE(process.isRunning());
 
   // 手动终止进程
-  bool terminated = process.terminate();
+  const bool terminated = process.terminate();
   EXPECT_TRUE(terminated);
 
   // 进程应该已经停止
   EXPECT_FALSE(process.isRunning());
 
   // 再次尝试终止已停止的进程应该返回true
-  bool terminated_again = process.terminate();
+  const bool terminated_again = process.terminate();
   EXPECT_TRUE(terminated_again);
 }
 
@@ -123,7 +123,7 @@ TEST_F(ProcessUtilsTest, ProcessExitCodes) {
   // 测试成功退出
   {
     Process process(test_script_path_.string(), {"--exit", "0"});
-    auto exit_code = process.waitForExit();
+    const auto exit_code = process.waitForExit();
     EXPECT_TRUE(exit_code.has_value());
     EXPECT_EQ(exit_code.value(), 0);
   }
@@ -131,7 +131,7 @@ TEST_F(ProcessUtilsTest, ProcessExitCodes) {
   // 测试错误退出
   {
     Process process(test_script_path_.string(), {"--exit", "42"});
-    auto exit_code = process.waitForExit();
+    const auto exit_code = process.waitForExit();
     EXPECT_TRUE(exit_code.has_value());
     EXPECT_EQ(exit_code.value(), 42);
   }
@@ -139,7 +139,7 @@ TEST_F(ProcessUtilsTest, ProcessExitCodes) {
   // 测试另一个错误退出码
   {
     Process process(test_script_path_.string(), {"--exit", "1"});
-    auto exit_code = process.waitForExit();
+    const auto exit_code = process.waitForExit();
     EXPECT_TRUE(exit_code.has_value());
     EXPECT_EQ(exit_code.value(), 1);
   }
@@ -149,11 +149,9 @@ TEST_F(ProcessUtilsTest, ProcessExitCodes) {
  * @brief 测试进程的RAII行为
  */
 TEST_F(ProcessUtilsTest, RAIIBehavior) {
-  ProcessId child_pid;
-
   {
     // 在作用域内创建进程
-    Process process(test_script_path_.string(), {"--sleep", "5"});
+    const Process process(test_script_path_.string(), {"--sleep", "5"});
     EXPECT_TRUE(process.isRunning());
 
     // 获取进程PID（需要通过某种方式，这里我们假设有方法）
@@ -167,7 +165,7 @@ TEST_F(ProcessUtilsTest, RAIIBehavior) {
 
   // 这里我们无法直接验证PID，但可以通过其他方式验证RAII行为
   // 比如重新启动相同的进程应该能够成功
-  Process new_process(test_script_path_.string(), {"--sleep", "1"});
+  const Process new_process(test_script_path_.string(), {"--sleep", "1"});
   EXPECT_TRUE(new_process.isRunning());
 }
 
@@ -198,7 +196,7 @@ TEST_F(ProcessUtilsTest, ProcessArguments) {
   Process process(test_script_path_.string(), {"--echo", "test_message"});
 
   // 等待进程完成
-  auto exit_code = process.waitForExit();
+  const auto exit_code = process.waitForExit();
   EXPECT_TRUE(exit_code.has_value());
   EXPECT_EQ(exit_code.value(), 0);
 }
@@ -207,7 +205,7 @@ TEST_F(ProcessUtilsTest, ProcessArguments) {
  * @brief 测试多个进程的并发管理
  */
 TEST_F(ProcessUtilsTest, ConcurrentProcesses) {
-  const int num_processes = 5;
+  constexpr int num_processes = 5;
   std::vector<std::unique_ptr<Process>> processes;
 
   // 启动多个进程
@@ -246,14 +244,14 @@ TEST_F(ProcessUtilsTest, ProcessStatusEdgeCases) {
   EXPECT_TRUE(process.isRunning());
 
   // 等待进程自然结束
-  auto exit_code = process.waitForExit();
+  const auto exit_code = process.waitForExit();
   EXPECT_TRUE(exit_code.has_value());
 
   // 进程已结束，isRunning应该返回false
   EXPECT_FALSE(process.isRunning());
 
   // 再次调用waitForExit应该返回空值（因为进程已经等待过了）
-  auto second_wait = process.waitForExit();
+  const auto second_wait = process.waitForExit();
   EXPECT_FALSE(second_wait.has_value());
 
   // 尝试终止已结束的进程应该成功
@@ -267,7 +265,7 @@ TEST_F(ProcessUtilsTest, FastExitingProcess) {
   Process process(test_script_path_.string(), {"--exit", "0"});
 
   // 等待进程结束（应该很快）
-  auto exit_code = process.waitForExit();
+  const auto exit_code = process.waitForExit();
   EXPECT_TRUE(exit_code.has_value());
   EXPECT_EQ(exit_code.value(), 0);
 
@@ -282,7 +280,7 @@ TEST_F(ProcessUtilsTest, SystemToolProcess) {
   // 测试使用echo命令（在大多数Unix系统上都可用）
   try {
     Process echo_process("/bin/echo", {"test", "message"});
-    auto exit_code = echo_process.waitForExit();
+    const auto exit_code = echo_process.waitForExit();
     EXPECT_TRUE(exit_code.has_value());
     EXPECT_EQ(exit_code.value(), 0);
   } catch (const std::runtime_error&) {
@@ -294,7 +292,7 @@ TEST_F(ProcessUtilsTest, SystemToolProcess) {
   try {
     Process sleep_process("/bin/sleep", {"0.1"});
     EXPECT_TRUE(sleep_process.isRunning());
-    auto exit_code = sleep_process.waitForExit();
+    const auto exit_code = sleep_process.waitForExit();
     EXPECT_TRUE(exit_code.has_value());
     EXPECT_EQ(exit_code.value(), 0);
   } catch (const std::runtime_error&) {

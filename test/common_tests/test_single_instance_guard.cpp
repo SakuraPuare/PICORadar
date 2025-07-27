@@ -11,7 +11,7 @@
 
 using namespace picoradar::common;
 
-class SingleInstanceGuardTest : public ::testing::Test {
+class SingleInstanceGuardTest : public testing::Test {
  protected:
   void SetUp() override {
     // 创建临时测试目录
@@ -173,8 +173,8 @@ TEST_F(SingleInstanceGuardTest, LockFileNameEdgeCases) {
  * @brief 测试并发场景下的锁行为 - 对同一个锁文件的竞争
  */
 TEST_F(SingleInstanceGuardTest, ConcurrentLockAttempts) {
-  const int num_threads = 5;
-  const int attempts_per_thread = 20;
+  constexpr int num_threads = 5;
+  constexpr int attempts_per_thread = 20;
   const std::string shared_lock_name = "concurrent_shared_test.pid";
 
   std::atomic<int> successful_acquisitions{0};
@@ -188,7 +188,7 @@ TEST_F(SingleInstanceGuardTest, ConcurrentLockAttempts) {
   // 启动多个线程尝试获取同一个锁
   futures.reserve(num_threads);
   for (int i = 0; i < num_threads; ++i) {
-    futures.push_back(std::async(std::launch::async, [&, i]() {
+    futures.push_back(std::async(std::launch::async, [&] {
       for (int j = 0; j < attempts_per_thread; ++j) {
         try {
           SingleInstanceGuard guard(shared_lock_name);
@@ -213,8 +213,8 @@ TEST_F(SingleInstanceGuardTest, ConcurrentLockAttempts) {
   }
 
   // Assert: 验证所有尝试都得到了处理
-  int total_attempts = num_threads * attempts_per_thread;
-  int total_handled =
+  constexpr int total_attempts = num_threads * attempts_per_thread;
+  const int total_handled =
       successful_acquisitions.load() + failed_acquisitions.load();
 
   EXPECT_EQ(total_handled, total_attempts) << "所有锁获取尝试都应该得到处理";
@@ -234,8 +234,8 @@ TEST_F(SingleInstanceGuardTest, ConcurrentLockAttempts) {
  * @brief 测试不同锁文件的并发获取（应该都能成功）
  */
 TEST_F(SingleInstanceGuardTest, ConcurrentDifferentLockFiles) {
-  const int num_threads = 5;
-  const int attempts_per_thread = 20;
+  constexpr int num_threads = 5;
+  constexpr int attempts_per_thread = 20;
 
   std::atomic<int> successful_acquisitions{0};
   std::atomic<int> failed_acquisitions{0};
@@ -245,7 +245,7 @@ TEST_F(SingleInstanceGuardTest, ConcurrentDifferentLockFiles) {
   // 启动多个线程，每个线程使用不同的锁文件
   futures.reserve(num_threads);
   for (int i = 0; i < num_threads; ++i) {
-    futures.push_back(std::async(std::launch::async, [&, i]() {
+    futures.push_back(std::async(std::launch::async, [&, i] {
       for (int j = 0; j < attempts_per_thread; ++j) {
         std::string lock_name = "different_locks_test_" + std::to_string(i) +
                                 "_" + std::to_string(j) + ".pid";
@@ -273,8 +273,8 @@ TEST_F(SingleInstanceGuardTest, ConcurrentDifferentLockFiles) {
   }
 
   // Assert: 验证所有尝试都得到了处理
-  int total_attempts = num_threads * attempts_per_thread;
-  int total_handled =
+  constexpr int total_attempts = num_threads * attempts_per_thread;
+  const int total_handled =
       successful_acquisitions.load() + failed_acquisitions.load();
 
   EXPECT_EQ(total_handled, total_attempts) << "所有锁获取尝试都应该得到处理";
@@ -291,7 +291,7 @@ TEST_F(SingleInstanceGuardTest, ConcurrentDifferentLockFiles) {
  * @brief 测试快速的锁获取和释放循环
  */
 TEST_F(SingleInstanceGuardTest, RapidLockCycling) {
-  const int num_cycles = 100;
+  constexpr int num_cycles = 100;
 
   for (int i = 0; i < num_cycles; ++i) {
     // 快速获取和释放锁

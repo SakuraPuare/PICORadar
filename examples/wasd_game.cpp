@@ -1,16 +1,16 @@
 #ifdef _WIN32
-    #include <windows.h>
-    #include <conio.h>
+#include <conio.h>
+#include <windows.h>
 #else
-    #include <fcntl.h>
-    #include <termios.h>
-    #include <unistd.h>
+#include <fcntl.h>
+#include <termios.h>
+#include <unistd.h>
 #endif
 
-#include <csignal>
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <csignal>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -20,6 +20,9 @@
 #include "client.hpp"
 #include "common/logging.hpp"
 
+namespace picoradar {
+class PlayerData;
+}
 using namespace picoradar::client;
 using namespace picoradar;
 
@@ -29,9 +32,9 @@ std::atomic<bool> g_connected{false};
 
 // 玩家信息
 std::string g_current_player_name;
-std::atomic<float> g_player_x{0.0F};
-std::atomic<float> g_player_y{0.0F};
-std::atomic<float> g_player_z{0.0F};
+std::atomic g_player_x{0.0F};
+std::atomic g_player_y{0.0F};
+std::atomic g_player_z{0.0F};
 
 // 其他玩家的信息
 std::map<std::string, PlayerData> g_other_players;
@@ -39,11 +42,11 @@ std::mutex g_players_mutex;
 
 // 终端控制相关
 #ifndef _WIN32
-struct termios g_old_tio;
+termios g_old_tio;
 #endif
 
 // 信号处理函数
-void signal_handler(int signal) {
+void signal_handler(const int signal) {
   if (signal == SIGINT || signal == SIGTERM) {
     g_running = false;
   }
@@ -58,7 +61,7 @@ void setup_terminal() {
   GetConsoleMode(hInput, &mode);
   SetConsoleMode(hInput, mode & ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT));
 #else
-  struct termios new_tio;
+  termios new_tio;
 
   // 获取当前终端设置并修改
   new_tio = g_old_tio;
@@ -71,13 +74,13 @@ void setup_terminal() {
   tcsetattr(STDIN_FILENO, TCSANOW, &new_tio);
 
   // 设置标准输入为非阻塞
-  int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+  const int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
   fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
 #endif
 }
 
 // 恢复终端设置
-void restore_terminal() { 
+void restore_terminal() {
 #ifdef _WIN32
   // Windows: 恢复控制台模式
   HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);
@@ -93,7 +96,7 @@ void restore_terminal() {
 void clear_screen() { std::cout << "\033[2J\033[1;1H" << std::flush; }
 
 // 移动光标到指定位置
-void move_cursor(int row, int col) {
+void move_cursor(const int row, const int col) {
   std::cout << "\033[" << row << ";" << col << "H" << std::flush;
 }
 
@@ -150,8 +153,8 @@ auto get_username() -> std::string {
 
     // 检查字符是否合法
     bool valid = true;
-    for (char c : username) {
-      if ((std::isalnum(c) == 0) && c != '_') {
+    for (const char c : username) {
+      if (std::isalnum(c) == 0 && c != '_') {
         valid = false;
         break;
       }
@@ -174,7 +177,8 @@ auto get_username() -> std::string {
 }
 
 // 格式化位置信息
-auto format_position(float x, float y, float z) -> std::string {
+auto format_position(const float x, const float y,
+                     const float z) -> std::string {
   std::ostringstream oss;
   oss << std::fixed << std::setprecision(1) << "(" << x << ", " << y << ", "
       << z << ")";
@@ -217,7 +221,7 @@ void draw_game_ui() {
   std::cout << "其他玩家:\n";
   std::cout << "────────────────────────────────────────────────\n";
 
-  std::lock_guard<std::mutex> lock(g_players_mutex);
+  std::lock_guard lock(g_players_mutex);
   if (g_other_players.empty()) {
     std::cout << "  (暂无其他玩家在线)\n";
   } else {
@@ -235,7 +239,6 @@ void draw_game_ui() {
 
 // 处理键盘输入
 void handle_input() {
-  const float move_speed = 1.0F;
   char ch;
 
 #ifdef _WIN32
@@ -245,6 +248,7 @@ void handle_input() {
 #else
   // Linux/Unix: 使用 read()
   while (read(STDIN_FILENO, &ch, 1) > 0) {
+    constexpr float move_speed = 1.0F;
 #endif
     switch (ch) {
       case 'w':
@@ -277,6 +281,7 @@ void handle_input() {
       case 3:  // Ctrl+C
         g_running = false;
         break;
+      default:;
     }
   }
 }
@@ -325,7 +330,7 @@ void ui_update_thread() {
   }
 }
 
-auto main(int argc, char* argv[]) -> int {
+auto main(const int argc, char* argv[]) -> int {
   // 初始化日志系统
   logger::Logger::Init("wasd_game", "./logs", logger::LogLevel::INFO, 10, true);
 
@@ -334,7 +339,7 @@ auto main(int argc, char* argv[]) -> int {
   signal(SIGTERM, signal_handler);
 
   // 获取用户名（在设置终端模式之前）
-  std::string username = get_username();
+  const std::string username = get_username();
   g_current_player_name = username;  // 设置全局变量
 
   // 现在保存当前终端设置，然后设置为游戏模式
@@ -345,7 +350,7 @@ auto main(int argc, char* argv[]) -> int {
   hide_cursor();
 
   // 在程序退出时恢复终端设置
-  std::atexit([]() {
+  std::atexit([] {
     show_cursor();
     restore_terminal();
   });
@@ -376,7 +381,7 @@ auto main(int argc, char* argv[]) -> int {
     // 设置玩家列表更新回调
     client.setOnPlayerListUpdate(
         [&player_id](const std::vector<PlayerData>& players) {
-          std::lock_guard<std::mutex> lock(g_players_mutex);
+          std::lock_guard lock(g_players_mutex);
           g_other_players.clear();
 
           for (const auto& player : players) {

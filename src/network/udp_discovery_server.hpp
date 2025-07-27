@@ -4,10 +4,8 @@
 #include <atomic>
 #include <boost/asio.hpp>
 #include <string>
-#include <thread>
 
-namespace picoradar {
-namespace network {
+namespace picoradar::network {
 
 namespace net = boost::asio;
 using udp = net::ip::udp;
@@ -19,7 +17,7 @@ class UdpDiscoveryServer {
   ~UdpDiscoveryServer();
 
   UdpDiscoveryServer(const UdpDiscoveryServer&) = delete;
-  UdpDiscoveryServer& operator=(const UdpDiscoveryServer&) = delete;
+  auto operator=(const UdpDiscoveryServer&) -> UdpDiscoveryServer& = delete;
 
   void start();
   void stop();
@@ -28,7 +26,8 @@ class UdpDiscoveryServer {
   void do_receive();
   void handle_receive(const boost::system::error_code& error,
                       std::size_t bytes_transferred);
-  void do_send(const std::string& message, udp::endpoint target_endpoint);
+  void do_send(const std::string& message,
+               const udp::endpoint& target_endpoint);
 
   net::io_context& ioc_;
   udp::socket socket_;
@@ -39,7 +38,6 @@ class UdpDiscoveryServer {
   std::atomic<bool> stop_flag_{false};
 };
 
-}  // namespace network
-}  // namespace picoradar
+}  // namespace picoradar::network
 
 #endif  // PICORADAR_NETWORK_UDP_DISCOVERY_SERVER_HPP

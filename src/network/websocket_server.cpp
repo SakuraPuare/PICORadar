@@ -1,12 +1,14 @@
 #include "network/websocket_server.hpp"
-#include "network/error_context.hpp"
+
+#include <fmt/format.h>
+
+#include "client.pb.h"
+#include "common/config_manager.hpp"
 #include "common/constants.hpp"
 #include "common/logging.hpp"
-#include "common/config_manager.hpp"
-#include "client.pb.h"
-#include "server.pb.h"
+#include "network/error_context.hpp"
 #include "player.pb.h"
-#include <fmt/format.h>
+#include "server.pb.h"
 
 namespace picoradar::network {
 
@@ -43,7 +45,7 @@ void Session::run() {
 void Session::do_accept() {
   // 设置握手超时
   beast::get_lowest_layer(ws_).expires_after(std::chrono::seconds(1));
-  
+
   ws_.async_accept(
       beast::bind_front_handler(&Session::on_accept, shared_from_this()));
 }
@@ -58,10 +60,10 @@ void Session::on_accept(beast::error_code ec) {
     server_.onSessionClosed(shared_from_this());
     return;
   }
-  
+
   // 关闭超时，允许长连接
   beast::get_lowest_layer(ws_).expires_never();
-  
+
   ErrorLogger::logOperationSuccess(ctx);
   do_read();
 }
@@ -80,7 +82,7 @@ void Session::on_read(beast::error_code ec, std::size_t bytes_transferred) {
 
   if (ec == websocket::error::closed || ec) {
     if (ErrorHelper::isClientDisconnect(ec)) {
-      LOG_INFO << "Client disconnected: " << endpoint 
+      LOG_INFO << "Client disconnected: " << endpoint
                << (player_id_.empty() ? "" : " (Player: " + player_id_ + ")");
     } else {
       ErrorLogger::logNetworkError(ctx, ec, "Read operation failed");
@@ -139,7 +141,7 @@ void Session::on_write(beast::error_code ec, std::size_t bytes_transferred) {
 }
 
 void Session::close() {
-  net::post(strand_, [self = shared_from_this()]() {
+  net::post(strand_, [self = shared_from_this()] {
     beast::get_lowest_layer(self->ws_).close();
   });
 }
@@ -153,7 +155,7 @@ void Session::on_close(beast::error_code ec) {
 // WebsocketServer implementation
 
 WebsocketServer::WebsocketServer(net::io_context& ioc,
-                               core::PlayerRegistry& registry)
+                                 core::PlayerRegistry& registry)
     : ioc_{ioc}, registry_{registry} {}
 
 WebsocketServer::~WebsocketServer() {
@@ -163,7 +165,7 @@ WebsocketServer::~WebsocketServer() {
 }
 
 void WebsocketServer::start(const std::string& address, uint16_t port,
-                           int thread_count) {
+                            int thread_count) {
   if (is_running_) {
     LOG_WARNING << "WebSocket server is already running";
     return;
@@ -191,7 +193,7 @@ void WebsocketServer::stop() {
   }
 
   LOG_INFO << "Stopping WebSocket server...";
-  net::post(ioc_, [this]() {
+  net::post(ioc_, [this] {
     if (listener_) {
       listener_->stop();
     }
@@ -230,9 +232,9 @@ void WebsocketServer::onSessionClosed(const std::shared_ptr<Session>& session) {
 }
 
 void WebsocketServer::processMessage(const std::shared_ptr<Session>& session,
-                                    const std::string& raw_message) {
+                                     const std::string& raw_message) {
   try {
-    ::picoradar::ClientToServer client_msg;
+    picoradar::ClientToServer client_msg;
     if (!client_msg.ParseFromString(raw_message)) {
       LOG_WARNING << "Failed to parse client message";
       return;
@@ -245,15 +247,15 @@ void WebsocketServer::processMessage(const std::shared_ptr<Session>& session,
 
       auto& config = picoradar::common::ConfigManager::getInstance();
       auto expectedToken = config.getString("auth.token");
-      
+
       if (!expectedToken || token != expectedToken.value()) {
         LOG_WARNING << "Authentication failed for token: " << token;
-        
-        ::picoradar::ServerToClient response;
+
+        picoradar::ServerToClient response;
         auto* auth_response = response.mutable_auth_response();
         auth_response->set_success(false);
         auth_response->set_message("Invalid authentication token");
-        
+
         std::string serialized_response;
         response.SerializeToString(&serialized_response);
         session->send(serialized_response);
@@ -261,22 +263,25 @@ void WebsocketServer::processMessage(const std::shared_ptr<Session>& session,
       }
 
       if (!player_id.empty()) {
-        LOG_INFO << fmt::format("Player {} authenticated successfully", player_id);
-        
+        LOG_INFO << fmt::format("Player {} authenticated successfully",
+                                player_id);
+
         session->setPlayerId(player_id);
 
-        ::picoradar::PlayerData player_data;
+        picoradar::PlayerData player_data;
         player_data.set_player_id(player_id);
         auto* position = player_data.mutable_position();
         position->set_x(0.0);
         position->set_y(0.0);
         position->set_z(0.0);
-        player_data.set_timestamp(std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count());
+        player_data.set_timestamp(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch())
+                .count());
 
         registry_.updatePlayer(player_id, std::move(player_data));
 
-        ::picoradar::ServerToClient response;
+        picoradar::ServerToClient response;
         auto* auth_response = response.mutable_auth_response();
         auth_response->set_success(true);
         auth_response->set_message("Authentication successful");
@@ -288,8 +293,8 @@ void WebsocketServer::processMessage(const std::shared_ptr<Session>& session,
         broadcastPlayerList();
       } else {
         LOG_WARNING << "Empty player ID in auth request";
-        
-        ::picoradar::ServerToClient response;
+
+        picoradar::ServerToClient response;
         auto* auth_response = response.mutable_auth_response();
         auth_response->set_success(false);
         auth_response->set_message("Player ID cannot be empty");
@@ -316,7 +321,7 @@ void WebsocketServer::processMessage(const std::shared_ptr<Session>& session,
 }
 
 void WebsocketServer::broadcastPlayerList() {
-  ::picoradar::ServerToClient response;
+  picoradar::ServerToClient response;
   auto* player_list = response.mutable_player_list();
 
   const auto players = registry_.getAllPlayers();
@@ -325,7 +330,8 @@ void WebsocketServer::broadcastPlayerList() {
     player_data->CopyFrom(player.second);
   }
 
-  LOG_DEBUG << "Broadcasting player list to " << sessions_.size() << " clients. Total players: " << players.size();
+  LOG_DEBUG << "Broadcasting player list to " << sessions_.size()
+            << " clients. Total players: " << players.size();
 
   std::string serialized_response;
   response.SerializeToString(&serialized_response);
@@ -339,7 +345,8 @@ std::string Session::getSafeEndpoint() const {
   try {
     if (ws_.next_layer().socket().is_open()) {
       auto endpoint = ws_.next_layer().socket().remote_endpoint();
-      return endpoint.address().to_string() + ":" + std::to_string(endpoint.port());
+      return endpoint.address().to_string() + ":" +
+             std::to_string(endpoint.port());
     }
   } catch (const std::exception& e) {
     // Socket is closed or not connected, return placeholder

@@ -10,7 +10,7 @@
 
 using picoradar::common::SingleInstanceGuard;
 
-const char* DEFAULT_LOCK_FILE_NAME = "pico_radar_test.pid";
+constexpr auto DEFAULT_LOCK_FILE_NAME = "pico_radar_test.pid";
 
 /**
  * @brief 解析命令行参数中的锁文件名
@@ -141,7 +141,7 @@ void show_usage(const char* program_name) {
   std::cout << "  " << program_name << " --test --file=test_lock.pid\n";
 }
 
-auto main(int argc, char** argv) -> int {
+auto main(const int argc, char** argv) -> int {
   google::InitGoogleLogging(argv[0]);
 
   // 设置日志级别和格式

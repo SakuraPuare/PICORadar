@@ -8,6 +8,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+
 #include "core/player_registry.hpp"
 #include "player.pb.h"
 
@@ -48,7 +49,7 @@ class Session : public std::enable_shared_from_this<Session> {
   // Getters and setters for player_id
   auto getPlayerId() const -> const std::string& { return player_id_; }
   void setPlayerId(const std::string& id) { player_id_ = id; }
-  
+
   // Safe method to get endpoint string
   std::string getSafeEndpoint() const;
 
@@ -90,26 +91,26 @@ class Listener : public std::enable_shared_from_this<Listener> {
 };
 
 class WebsocketServer {
-public:
-    WebsocketServer(net::io_context& ioc, core::PlayerRegistry& registry);
-    ~WebsocketServer();
+ public:
+  WebsocketServer(net::io_context& ioc, core::PlayerRegistry& registry);
+  ~WebsocketServer();
 
-    void start(const std::string& address, uint16_t port, int thread_count);
-    void stop();
+  void start(const std::string& address, uint16_t port, int thread_count);
+  void stop();
 
-    void onSessionOpened(const std::shared_ptr<Session>& session);
-    void onSessionClosed(const std::shared_ptr<Session>& session);
-    void processMessage(const std::shared_ptr<Session>& session,
+  void onSessionOpened(const std::shared_ptr<Session>& session);
+  void onSessionClosed(const std::shared_ptr<Session>& session);
+  void processMessage(const std::shared_ptr<Session>& session,
                       const std::string& message);
-    void broadcastPlayerList();
+  void broadcastPlayerList();
 
-private:
-    net::io_context& ioc_;
-    core::PlayerRegistry& registry_;
-    std::shared_ptr<Listener> listener_;
-    std::set<std::shared_ptr<Session>> sessions_;
-    std::vector<std::thread> threads_;
-    bool is_running_ = false;
+ private:
+  net::io_context& ioc_;
+  core::PlayerRegistry& registry_;
+  std::shared_ptr<Listener> listener_;
+  std::set<std::shared_ptr<Session>> sessions_;
+  std::vector<std::thread> threads_;
+  bool is_running_ = false;
 };
 
 }  // namespace picoradar::network

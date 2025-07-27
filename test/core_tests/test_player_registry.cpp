@@ -14,7 +14,7 @@ auto createTestPlayer(const std::string& id, float x) -> picoradar::PlayerData {
 }
 
 // 测试套件(Test Suite) for PlayerRegistry
-class PlayerRegistryTest : public ::testing::Test {
+class PlayerRegistryTest : public testing::Test {
  protected:
   PlayerRegistry registry;
 };
@@ -27,7 +27,7 @@ TEST_F(PlayerRegistryTest, InitialState) {
 
 // 测试用例: 添加单个玩家
 TEST_F(PlayerRegistryTest, AddSinglePlayer) {
-  picoradar::core::PlayerRegistry registry;
+  PlayerRegistry registry;
   auto p1 = createTestPlayer("player1", 1.0F);
   registry.updatePlayer(p1.player_id(), p1);
 
@@ -40,7 +40,7 @@ TEST_F(PlayerRegistryTest, AddSinglePlayer) {
 
 // 测试用例: 添加多个玩家
 TEST_F(PlayerRegistryTest, AddMultiplePlayers) {
-  picoradar::core::PlayerRegistry registry;
+  PlayerRegistry registry;
   registry.updatePlayer("player1", createTestPlayer("player1", 1.0F));
   registry.updatePlayer("player2", createTestPlayer("player2", 2.0F));
 
@@ -66,7 +66,7 @@ TEST_F(PlayerRegistryTest, AddMultiplePlayers) {
 
 // 测试用例: 更新现有玩家
 TEST_F(PlayerRegistryTest, UpdateExistingPlayer) {
-  picoradar::core::PlayerRegistry registry;
+  PlayerRegistry registry;
   registry.updatePlayer("player1", createTestPlayer("player1", 1.0F));
 
   auto player1 = registry.getPlayer("player1");
@@ -83,7 +83,7 @@ TEST_F(PlayerRegistryTest, UpdateExistingPlayer) {
 
 // 测试用例: 移除玩家
 TEST_F(PlayerRegistryTest, RemovePlayer) {
-  picoradar::core::PlayerRegistry registry;
+  PlayerRegistry registry;
   registry.updatePlayer("player1", createTestPlayer("player1", 1.0F));
   registry.updatePlayer("player2", createTestPlayer("player2", 2.0F));
   ASSERT_EQ(registry.getPlayerCount(), 2);
@@ -96,7 +96,7 @@ TEST_F(PlayerRegistryTest, RemovePlayer) {
 
 // 测试用例: 移除不存在的玩家
 TEST_F(PlayerRegistryTest, RemoveNonExistentPlayer) {
-  picoradar::core::PlayerRegistry registry;
+  PlayerRegistry registry;
   registry.updatePlayer("player1", createTestPlayer("player1", 1.0F));
   ASSERT_EQ(registry.getPlayerCount(), 1);
 
@@ -112,13 +112,13 @@ TEST_F(PlayerRegistryTest, GetNonExistentPlayer) {
 
 // 测试用例: 线程安全
 TEST_F(PlayerRegistryTest, ThreadSafety) {
-  picoradar::core::PlayerRegistry registry;
-  const int threadCount = 4;
-  const int updatesPerThread = 1000;
+  PlayerRegistry registry;
+  constexpr int threadCount = 4;
+  constexpr int updatesPerThread = 1000;
   std::vector<std::thread> threads;
 
   for (int i = 0; i < threadCount; ++i) {
-    threads.emplace_back([this, &registry, i]() {
+    threads.emplace_back([this, &registry, i] {
       for (int j = 0; j < updatesPerThread; ++j) {
         std::string id = "player" + std::to_string(i);
         registry.updatePlayer(id, createTestPlayer(id, static_cast<float>(j)));

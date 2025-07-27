@@ -10,7 +10,7 @@
 using namespace picoradar::client;
 using namespace picoradar;
 
-class ClientConnectionTest : public ::testing::Test {
+class ClientConnectionTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
     // 初始化日志系统
@@ -35,13 +35,13 @@ class ClientConnectionTest : public ::testing::Test {
  * @brief 测试连接到不存在的服务器
  */
 TEST_F(ClientConnectionTest, ConnectToNonExistentServer) {
-  Client client;
+  const Client client;
 
   // 连接到一个不太可能被占用的端口
   auto future = client.connect("127.0.0.1:65432", "test_player", "test_token");
 
   // 应该在合理时间内超时失败
-  auto status = future.wait_for(std::chrono::seconds(2));
+  const auto status = future.wait_for(std::chrono::seconds(2));
   if (status == std::future_status::ready) {
     // 如果快速完成，应该是错误
     EXPECT_THROW(future.get(), std::exception);
@@ -58,7 +58,7 @@ TEST_F(ClientConnectionTest, ConnectToNonExistentServer) {
  * @brief 测试 DNS 解析失败
  */
 TEST_F(ClientConnectionTest, DnsResolutionFailure) {
-  Client client;
+  const Client client;
 
   // 使用一个不存在的域名，应该在DNS解析时失败
   auto future =
@@ -66,7 +66,7 @@ TEST_F(ClientConnectionTest, DnsResolutionFailure) {
                      "test_player", "test_token");
 
   // DNS解析超时现在设置为3秒，加上一些缓冲时间
-  auto status = future.wait_for(std::chrono::seconds(15));
+  const auto status = future.wait_for(std::chrono::seconds(15));
   EXPECT_EQ(status, std::future_status::ready);
 
   // 应该抛出DNS解析相关的异常
@@ -99,14 +99,14 @@ TEST_F(ClientConnectionTest, ConcurrentConnectAttempts) {
  * @brief 测试连接超时
  */
 TEST_F(ClientConnectionTest, ConnectionTimeout) {
-  Client client;
+  const Client client;
 
   // 连接到一个丢弃数据包的地址（通常会超时）
   // 使用一个保留的 IP 地址范围，这些地址不会路由
   auto future = client.connect("192.0.2.1:8080", "test_player", "test_token");
 
   // 等待较短时间就足以验证超时逻辑
-  auto status = future.wait_for(std::chrono::seconds(2));
+  const auto status = future.wait_for(std::chrono::seconds(2));
 
   if (status == std::future_status::ready) {
     // 如果快速完成，应该是错误
@@ -121,7 +121,7 @@ TEST_F(ClientConnectionTest, ConnectionTimeout) {
  * @brief 测试连接后立即断开
  */
 TEST_F(ClientConnectionTest, ConnectThenImmediateDisconnect) {
-  Client client;
+  const Client client;
 
   // 开始连接过程（使用真实域名但无效端口）
   auto future = client.connect("google.com:8080", "test_player", "test_token");
@@ -140,11 +140,11 @@ TEST_F(ClientConnectionTest, ConnectThenImmediateDisconnect) {
  * @brief 测试连接后可以重新连接
  */
 TEST_F(ClientConnectionTest, ReconnectAfterFailure) {
-  Client client;
+  const Client client;
 
   // 第一次连接尝试（使用真实域名但无效端口）
   auto future1 = client.connect("google.com:8080", "player1", "token1");
-  auto status1 = future1.wait_for(std::chrono::seconds(5));
+  const auto status1 = future1.wait_for(std::chrono::seconds(5));
   EXPECT_EQ(status1, std::future_status::ready);
   EXPECT_THROW(future1.get(), std::exception);
   EXPECT_FALSE(client.isConnected());
@@ -154,7 +154,7 @@ TEST_F(ClientConnectionTest, ReconnectAfterFailure) {
 
   // 第二次连接尝试应该被允许（使用另一个真实域名但无效端口）
   auto future2 = client.connect("github.com:8080", "player2", "token2");
-  auto status2 = future2.wait_for(std::chrono::seconds(5));
+  const auto status2 = future2.wait_for(std::chrono::seconds(5));
   EXPECT_EQ(status2, std::future_status::ready);
   EXPECT_THROW(future2.get(), std::exception);
   EXPECT_FALSE(client.isConnected());
@@ -164,7 +164,7 @@ TEST_F(ClientConnectionTest, ReconnectAfterFailure) {
  * @brief 测试多次断开连接
  */
 TEST_F(ClientConnectionTest, MultipleDisconnects) {
-  Client client;
+  const Client client;
 
   // 多次调用 disconnect 应该是安全的
   client.disconnect();
@@ -191,7 +191,7 @@ TEST_F(ClientConnectionTest, SendDataDuringConnection) {
   EXPECT_NO_THROW(client.sendPlayerData(data));
 
   // 等待连接失败
-  auto status = future.wait_for(std::chrono::seconds(5));
+  const auto status = future.wait_for(std::chrono::seconds(5));
   EXPECT_EQ(status, std::future_status::ready);
 
   // 预期会失败

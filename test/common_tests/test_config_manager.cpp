@@ -12,7 +12,7 @@
 
 using namespace picoradar::common;
 
-class ConfigManagerTest : public ::testing::Test {
+class ConfigManagerTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
     // 初始化日志系统
@@ -40,7 +40,7 @@ class ConfigManagerTest : public ::testing::Test {
     }
   }
 
-  void createTestConfigFile(const std::string& content) {
+  void createTestConfigFile(const std::string& content) const {
     std::ofstream file(test_config_path_);
     file << content;
     file.close();
@@ -135,7 +135,7 @@ TEST_F(ConfigManagerTest, InvalidJsonFormat) {
  * @brief 测试获取不存在的配置项
  */
 TEST_F(ConfigManagerTest, GetNonExistentKeys) {
-  ConfigManager& config = ConfigManager::getInstance();
+  const ConfigManager& config = ConfigManager::getInstance();
 
   // 测试不存在的键应该返回错误
   auto result = config.getString("non_existent_key");
@@ -253,14 +253,14 @@ TEST_F(ConfigManagerTest, ThreadSafety) {
   auto result = config.loadFromFile(test_config_path_.string());
   EXPECT_TRUE(result.has_value());
 
-  const int num_threads = 10;
-  const int operations_per_thread = 100;
+  constexpr int num_threads = 10;
+  constexpr int operations_per_thread = 100;
   std::vector<std::thread> threads;
   std::atomic<int> success_count{0};
 
   // 启动多个线程同时读取配置
   for (int i = 0; i < num_threads; ++i) {
-    threads.emplace_back([&config, &success_count, operations_per_thread]() {
+    threads.emplace_back([&config, &success_count, operations_per_thread] {
       for (int j = 0; j < operations_per_thread; ++j) {
         // 同时读取不同的配置项
         auto value = config.getString("shared_value");
@@ -429,8 +429,8 @@ TEST_F(ConfigManagerTest, PortNumberMethods) {
   ConfigManager& config = ConfigManager::getInstance();
 
   // 测试默认端口号
-  uint16_t service_port = config.getServicePort();
-  uint16_t discovery_port = config.getDiscoveryPort();
+  const uint16_t service_port = config.getServicePort();
+  const uint16_t discovery_port = config.getDiscoveryPort();
 
   // 验证返回的是合理的端口号
   EXPECT_GT(service_port, 0);

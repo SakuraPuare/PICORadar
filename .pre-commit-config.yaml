@@ -31,6 +31,19 @@ repos:
     hooks:
     -   id: clang-tidy
         types_or: [c++, c]
+        exclude: |
+            (?x)^(
+                build/|
+                vcpkg/|
+                vcpkg_installed/|
+                unreal/
+            )$
+        files: |
+            (?x)^(
+                src/.*\.(cpp|hpp|c|h)$|
+                test/.*\.(cpp|hpp|c|h)$|
+                examples/.*\.(cpp|hpp|c|h)$
+            )$
         args:
         - --fix
         # - --fix-errors

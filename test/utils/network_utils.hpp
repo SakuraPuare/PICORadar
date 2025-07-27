@@ -1,7 +1,6 @@
 #pragma once
 
 #include <boost/asio.hpp>
-#include <cstdint>
 
 namespace picoradar::test {
 
@@ -27,7 +26,7 @@ inline auto get_available_port() -> uint16_t {
     if (ec) {
       return 0;
     }
-    uint16_t port = acceptor.local_endpoint().port();
+    const uint16_t port = acceptor.local_endpoint().port();
     acceptor.close();
     return port;
   } catch (const std::exception&) {

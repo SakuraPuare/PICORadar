@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <fstream>
 #include <random>
-#include <sstream>
 
 #include "constants.hpp"
 
@@ -30,7 +29,7 @@ ConfigResult<void> ConfigManager::loadFromFile(const std::string& filename) {
     json json_config;
     file >> json_config;
 
-    std::unique_lock<std::shared_mutex> lock(mutex_);
+    std::unique_lock lock(mutex_);
     config_ = std::move(json_config);
     cache_.clear();  // 清空缓存
 
@@ -46,7 +45,7 @@ ConfigResult<void> ConfigManager::loadFromFile(const std::string& filename) {
 
 ConfigResult<void> ConfigManager::loadFromJson(const nlohmann::json& json) {
   try {
-    std::unique_lock<std::shared_mutex> lock(mutex_);
+    std::unique_lock lock(mutex_);
     config_ = json;
     cache_.clear();  // 清空缓存
     loadEnvironmentVariables();
@@ -128,7 +127,7 @@ ConfigResult<void> ConfigManager::saveToFile(
           ConfigError{"Failed to open file for writing: " + filename});
     }
 
-    std::shared_lock<std::shared_mutex> lock(mutex_);
+    std::shared_lock lock(mutex_);
     file << config_.dump(4);
 
     return {};
@@ -139,7 +138,7 @@ ConfigResult<void> ConfigManager::saveToFile(
 }
 
 nlohmann::json ConfigManager::getConfig() const {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  std::shared_lock lock(mutex_);
   return config_;
 }
 
@@ -147,7 +146,7 @@ ConfigResult<nlohmann::json> ConfigManager::getJsonValue(
     const std::string& key) const {
   // 首先尝试用共享锁读取缓存
   {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
+    std::shared_lock lock(mutex_);
     auto it = cache_.find(key);
     if (it != cache_.end()) {
       return it->second;
@@ -155,7 +154,7 @@ ConfigResult<nlohmann::json> ConfigManager::getJsonValue(
   }
 
   // 如果缓存中没有，需要独占锁来更新缓存
-  std::unique_lock<std::shared_mutex> lock(mutex_);
+  std::unique_lock lock(mutex_);
 
   // 双重检查：可能在获取独占锁期间其他线程已经更新了缓存
   auto it = cache_.find(key);
@@ -179,7 +178,7 @@ ConfigResult<nlohmann::json> ConfigManager::getJsonValue(
     while (end != std::string::npos) {
       end = key.find('.', start);
       std::string k = key.substr(
-          start, (end == std::string::npos) ? std::string::npos : end - start);
+          start, end == std::string::npos ? std::string::npos : end - start);
 
       if (!k.empty()) {
         if (!current.is_object() || !current.contains(k)) {
@@ -188,7 +187,7 @@ ConfigResult<nlohmann::json> ConfigManager::getJsonValue(
         current = current[k];
       }
 
-      start = ((end > (std::string::npos - 1)) ? std::string::npos : end + 1);
+      start = end > std::string::npos - 1 ? std::string::npos : end + 1;
     }
   }
 
@@ -219,7 +218,7 @@ void ConfigManager::loadEnvironmentVariables() {
   }
 }
 
-std::string ConfigManager::generateSecureToken() const {
+auto ConfigManager::generateSecureToken() -> std::string {
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_int_distribution<> dis(0, 61);
@@ -240,28 +239,28 @@ std::string ConfigManager::generateSecureToken() const {
 template <>
 void ConfigManager::set<std::string>(const std::string& key,
                                      const std::string& value) {
-  std::unique_lock<std::shared_mutex> lock(mutex_);
+  std::unique_lock lock(mutex_);
   setNoLock(key, value);
   cache_.clear();  // 写入操作后清空缓存
 }
 
 template <>
 void ConfigManager::set<int>(const std::string& key, const int& value) {
-  std::unique_lock<std::shared_mutex> lock(mutex_);
+  std::unique_lock lock(mutex_);
   setNoLock(key, value);
   cache_.clear();  // 写入操作后清空缓存
 }
 
 template <>
 void ConfigManager::set<bool>(const std::string& key, const bool& value) {
-  std::unique_lock<std::shared_mutex> lock(mutex_);
+  std::unique_lock lock(mutex_);
   setNoLock(key, value);
   cache_.clear();  // 写入操作后清空缓存
 }
 
 template <>
 void ConfigManager::set<double>(const std::string& key, const double& value) {
-  std::unique_lock<std::shared_mutex> lock(mutex_);
+  std::unique_lock lock(mutex_);
   setNoLock(key, value);
   cache_.clear();  // 写入操作后清空缓存
 }
@@ -297,13 +296,12 @@ double ConfigManager::getWithDefault<double>(
 
 uint16_t ConfigManager::getServicePort() const {
   return static_cast<uint16_t>(getWithDefault(
-      "server.port", static_cast<int>(picoradar::config::kDefaultServicePort)));
+      "server.port", static_cast<int>(config::kDefaultServicePort)));
 }
 
 uint16_t ConfigManager::getDiscoveryPort() const {
   return static_cast<uint16_t>(getWithDefault(
-      "discovery.udp_port",
-      static_cast<int>(picoradar::config::kDefaultDiscoveryPort)));
+      "discovery.udp_port", static_cast<int>(config::kDefaultDiscoveryPort)));
 }
 
 // 内部设置方法实现 - 不获取锁（假设调用者已持有）
@@ -326,23 +324,22 @@ void ConfigManager::setNoLock(const std::string& key, const T& value) {
     while (end != std::string::npos) {
       end = key.find('.', start);
       std::string k = key.substr(
-          start, (end == std::string::npos) ? std::string::npos : end - start);
+          start, end == std::string::npos ? std::string::npos : end - start);
 
       if (!k.empty()) {
         if (end == std::string::npos) {
           // 这是最后一个键
           last_key = k;
           break;
-        } else {
-          // 不是最后一个键，继续向下
-          if (!current->is_object()) {
-            *current = json::object();
-          }
-          current = &(*current)[k];
         }
+        // 不是最后一个键，继续向下
+        if (!current->is_object()) {
+          *current = json::object();
+        }
+        current = &(*current)[k];
       }
 
-      start = ((end > (std::string::npos - 1)) ? std::string::npos : end + 1);
+      start = end > std::string::npos - 1 ? std::string::npos : end + 1;
     }
 
     if (!last_key.empty()) {

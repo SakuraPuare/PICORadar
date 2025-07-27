@@ -9,7 +9,6 @@
 #else
 #include <sys/types.h>
 
-#include <csignal>
 #endif
 
 namespace picoradar::common {

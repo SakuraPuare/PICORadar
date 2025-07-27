@@ -1,13 +1,11 @@
 #pragma once
 
-#include <stdexcept>
 #include <string>
 
 #ifdef _WIN32
 #include <windows.h>
 #else
-#include <sys/file.h>
-#include <unistd.h>
+
 #endif
 
 namespace picoradar::common {

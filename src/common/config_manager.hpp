@@ -82,7 +82,7 @@ class ConfigManager {
   // 私有辅助方法
   ConfigResult<nlohmann::json> getJsonValue(const std::string& key) const;
   void loadEnvironmentVariables();
-  std::string generateSecureToken() const;
+  static std::string generateSecureToken();
 
   // 内部设置方法，假设调用者已持有锁
   template <typename T>

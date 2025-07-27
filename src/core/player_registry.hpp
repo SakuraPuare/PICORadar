@@ -26,8 +26,7 @@ class PlayerRegistry {
    * @param playerId 玩家ID（优化为move语义）
    * @param data 玩家数据（优化为move语义）
    */
-  void updatePlayer(std::string playerId,
-                    picoradar::PlayerData data);
+  void updatePlayer(std::string playerId, picoradar::PlayerData data);
 
   /**
    * @brief 移除一个玩家。

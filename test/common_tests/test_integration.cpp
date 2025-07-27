@@ -15,7 +15,7 @@
 
 using namespace picoradar::common;
 
-class IntegrationTest : public ::testing::Test {
+class IntegrationTest : public testing::Test {
  protected:
   void SetUp() override {
     temp_dir_ =
@@ -37,7 +37,7 @@ class IntegrationTest : public ::testing::Test {
     }
   }
 
-  void createIntegrationConfig() {
+  void createIntegrationConfig() const {
     std::ofstream file(config_file_);
     file << R"({
             "application": {
@@ -63,7 +63,7 @@ class IntegrationTest : public ::testing::Test {
     file.close();
   }
 
-  void createIntegrationScript() {
+  void createIntegrationScript() const {
     std::ofstream script(test_script_);
     script << "#!/bin/bash\n";
     script << "case $1 in\n";
@@ -172,7 +172,7 @@ TEST_F(IntegrationTest, ConfigDrivenProcessManagement) {
   }
 
   // 等待所有进程完成
-  for (auto& worker : workers) {
+  for (const auto& worker : workers) {
     auto exit_code = worker->waitForExit();
     EXPECT_TRUE(exit_code.has_value());
     EXPECT_EQ(exit_code.value(), 0);
@@ -295,13 +295,13 @@ TEST_F(IntegrationTest, FailureRecoveryScenario) {
     Process failing_process(test_script_.string(), {"--fail"});
 
     // 等待进程失败
-    auto exit_code = failing_process.waitForExit();
+    const auto exit_code = failing_process.waitForExit();
     EXPECT_TRUE(exit_code.has_value());
     EXPECT_NE(exit_code.value(), 0);  // 应该以非零退出码失败
 
     // 模拟重启
     Process restart_process(test_script_.string(), {"--quick"});
-    auto restart_exit = restart_process.waitForExit();
+    const auto restart_exit = restart_process.waitForExit();
     EXPECT_TRUE(restart_exit.has_value());
     EXPECT_EQ(restart_exit.value(), 0);  // 重启应该成功
   }
@@ -319,7 +319,9 @@ TEST_F(IntegrationTest, ResourceCleanupScenario) {
   ASSERT_TRUE(lock_file.has_value());
 
   // 确保锁文件在测试开始前不存在
-  std::string full_lock_path = std::string(std::getenv("TMPDIR") ? std::getenv("TMPDIR") : "/tmp") + "/" + lock_file.value();
+  std::string full_lock_path =
+      std::string(std::getenv("TMPDIR") ? std::getenv("TMPDIR") : "/tmp") +
+      "/" + lock_file.value();
   std::filesystem::remove(full_lock_path);
 
   std::vector<ProcessId> process_pids;
@@ -347,7 +349,7 @@ TEST_F(IntegrationTest, ResourceCleanupScenario) {
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
   // 验证锁已被释放 - 应该能够创建新的守护
-  EXPECT_NO_THROW({ 
+  EXPECT_NO_THROW({
     SingleInstanceGuard new_guard(lock_file.value());
     // 立即销毁以释放锁
   });
@@ -394,8 +396,8 @@ TEST_F(IntegrationTest, ConcurrentComponentInteraction) {
   auto load_result = config.loadFromFile(config_file_.string());
   ASSERT_TRUE(load_result.has_value());
 
-  const int num_threads = 5;
-  const int operations_per_thread = 20;
+  constexpr int num_threads = 5;
+  constexpr int operations_per_thread = 20;
 
   std::vector<std::thread> threads;
   std::atomic<int> successful_operations{0};
@@ -403,20 +405,20 @@ TEST_F(IntegrationTest, ConcurrentComponentInteraction) {
 
   threads.reserve(num_threads);
   for (int i = 0; i < num_threads; ++i) {
-    threads.emplace_back([&, i]() {
+    threads.emplace_back([&, i] {
       for (int j = 0; j < operations_per_thread; ++j) {
         try {
           // 配置读取
-          auto app_name = config.getString("application.name");
-          if (!app_name.has_value()) {
+          if (auto app_name = config.getString("application.name");
+              !app_name.has_value()) {
             failed_operations.fetch_add(1);
             continue;
           }
 
           // 短暂的锁操作
-          std::string lock_name =
-              "concurrent_lock_" + std::to_string(i) + "_" + std::to_string(j);
           {
+            std::string lock_name = "concurrent_lock_" + std::to_string(i) +
+                                    "_" + std::to_string(j);
             SingleInstanceGuard guard(lock_name);
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
           }
@@ -441,7 +443,7 @@ TEST_F(IntegrationTest, ConcurrentComponentInteraction) {
     thread.join();
   }
 
-  int total_operations = num_threads * operations_per_thread;
+  const int total_operations = num_threads * operations_per_thread;
   EXPECT_EQ(successful_operations.load() + failed_operations.load(),
             total_operations);
   EXPECT_GT(successful_operations.load(),
@@ -451,5 +453,5 @@ TEST_F(IntegrationTest, ConcurrentComponentInteraction) {
   LOG_INFO << "  Successful operations: " << successful_operations.load();
   LOG_INFO << "  Failed operations: " << failed_operations.load();
   LOG_INFO << "  Success rate: "
-           << (successful_operations.load() * 100.0) / total_operations << "%";
+           << successful_operations.load() * 100.0 / total_operations << "%";
 }
